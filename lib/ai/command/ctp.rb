@@ -35,7 +35,8 @@ class AI::Command::Ctp < AI::Command::Base
 
       puts state.to_s
 
-      puts depth_first_search(state).to_s
+      # puts depth_first_search(state).to_s
+      puts breadth_first_search(state).to_s
     end
   end
 
@@ -69,6 +70,22 @@ class AI::Command::Ctp < AI::Command::Base
       end
     end
     best_end
+  end
+
+  def breadth_first_search(initial_state)
+    state = clone_state(initial_state)
+    @search_visits = [clone_state(state)]
+    fringe = [state]
+
+    while true
+      transitions = filter_terminated_paths(@search_visits, valid_transitions(state))
+      if transitions == []
+        break
+      else
+        state = transitions[0]
+      end
+    end
+    state
   end
 
   def valid_transitions(current_state)
