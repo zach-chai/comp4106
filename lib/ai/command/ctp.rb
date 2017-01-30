@@ -2,9 +2,9 @@
 
 class AI::Command::Ctp < AI::Command::Base
   VALID_METHODS = ['help']
-  DEFAULT_TIMES = "1,2,3,4"
+  DEFAULT_TIMES = "1,2,3,5,8,13"
 
-  attr_accessor :times
+  attr_accessor :times, :end_position, :search_visits
 
   def index
     if @opts.help?
@@ -16,6 +16,9 @@ class AI::Command::Ctp < AI::Command::Base
       @times = t.split(',')
       @times.map! {|t| t.to_i}
       puts @times.to_s
+
+      @end_position = Array.new(@times.size + 1, 1)
+      puts @end_position.to_s
 
 
       # initial state {t: 0, p: [0,0,0,0,0,0,0]}
@@ -31,16 +34,16 @@ class AI::Command::Ctp < AI::Command::Base
         state[:p] << 0
       end
 
-      # state = {time: 0, position: [1,1,1,0,0]}
+      # state = {t: 0, p: [1,1,1,1,1]}
       puts state.to_s
 
-      puts valid_transitions(state).to_s
+      # puts valid_transitions(state).to_s
+
+      puts depth_first_search(state).to_s
 
       # traverse the tree and store the paths
       # depth first search style
 
-      # add time to the state
-      # calculate the new total time on transition
       # store previously visited states and the time
       # upon revisiting a visited state update the time to the lower of the two
       # if the revisit has a higher time terminate that transition
@@ -51,7 +54,46 @@ class AI::Command::Ctp < AI::Command::Base
     end
   end
 
+  def depth_first_search(initial_state)
+    best_end = {}
+    state = clone_state(initial_state)
+    @search_visits = [clone_state(state)]
+    path_visits = [state]
+
+    while true
+      while true
+        transitions = filter_terminated_paths(@search_visits, valid_transitions(state))
+        if transitions == []
+          if state[:p] == @end_position
+            if best_end.empty? || best_end[:t] > state[:t]
+              best_end = state
+              puts path_visits.to_s
+            end
+          end
+          break
+        else
+          state = transitions[0]
+          update_search_visits(state)
+          path_visits << state
+          # puts state.to_s
+        end
+      end
+      # require 'byebug'
+      # byebug
+      path_visits.pop
+      state = path_visits.last
+      if path_visits.empty?
+        break
+      end
+    end
+    best_end
+  end
+
   def valid_transitions(current_state)
+    if current_state[:p] == @end_position
+        return []
+    end
+
     states = []
     torch = current_state[:p][0]
     if current_state[:p][0] == 0
@@ -63,33 +105,66 @@ class AI::Command::Ctp < AI::Command::Base
     current_state[:p].each_with_index do |p, i|
       next if i == 0 || p != torch
 
-      state = current_state.clone
-      state[:p] = current_state[:p].clone
+      state = clone_state(current_state)
 
       state[:p][0] = (torch + 1) % 2
       state[:p][i] = (torch + 1) % 2
 
-      state[:t] += @times[i - 1]
 
       if crossers == 2
         state[:p].each_with_index do |q, j|
           next if j < i || q != torch
 
-          state2 = state.clone
-          state2[:p] = state[:p].clone
+          state2 = clone_state(state)
 
           state2[:p][j] = (torch + 1) % 2
 
-          state2[:t] += @times[j - 1]
-
+          state2[:t] += [@times[i - 1], @times[j - 1]].max
           states << state2
         end
       else
+        state[:t] += @times[i - 1]
         states << state
       end
     end
 
     states
+  end
+
+  def filter_terminated_paths(visited, transitions)
+    filtered = []
+    transitions.each do |t|
+      if !terminated_path?(visited, t)
+        filtered << t
+      end
+    end
+    filtered
+  end
+
+  def terminated_path?(visited, transition)
+    visited.each do |v|
+      if v[:p] == transition[:p] && v[:t] <= transition[:t]
+        return true
+      end
+    end
+    false
+  end
+
+  def update_search_visits(state)
+    @search_visits.each_with_index do |visit, index|
+      if visit[:p] == state[:p] && visit[:t] > state[:t]
+        @search_visits[index] = state
+        return true
+      end
+    end
+    @search_visits << clone_state(state)
+    true
+  end
+
+  def clone_state(state)
+    s = state.clone
+    s[:p] = state[:p].clone
+    s
   end
 
   private
