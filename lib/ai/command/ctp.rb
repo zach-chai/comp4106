@@ -15,10 +15,9 @@ class AI::Command::Ctp < AI::Command::Base
 
       @times = t.split(',')
       @times.map! {|t| t.to_i}
-      puts @times.to_s
+      puts "Input times: #{@times}"
 
       @end_position = Array.new(@times.size + 1, 1)
-      puts @end_position.to_s
 
 
       # initial state {t: 0, p: [0,0,0,0,0,0,0]}
@@ -34,23 +33,9 @@ class AI::Command::Ctp < AI::Command::Base
         state[:p] << 0
       end
 
-      # state = {t: 0, p: [1,1,1,1,1]}
       puts state.to_s
 
-      # puts valid_transitions(state).to_s
-
       puts depth_first_search(state).to_s
-
-      # traverse the tree and store the paths
-      # depth first search style
-
-      # store previously visited states and the time
-      # upon revisiting a visited state update the time to the lower of the two
-      # if the revisit has a higher time terminate that transition
-      # otherwise continue transition
-
-      # when traversing keep track of state at each node/level so you can resume from node/level when finished with child nodes
-
     end
   end
 
@@ -75,11 +60,8 @@ class AI::Command::Ctp < AI::Command::Base
           state = transitions[0]
           update_search_visits(state)
           path_visits << state
-          # puts state.to_s
         end
       end
-      # require 'byebug'
-      # byebug
       path_visits.pop
       state = path_visits.last
       if path_visits.empty?
@@ -176,8 +158,6 @@ class AI::Command::Ctp < AI::Command::Base
     opts.separator 'Ctp options:'
     opts.bool '-h', '--help', 'print options', default: false
     opts.string '-t', '--times', 'person times', default: DEFAULT_TIMES
-    # opts.string '-d', '--directory', 'root directory to generate', default: DEFAULT_DIRECTORY
-    # opts.bool '-m', '--minify', 'minify JSON output', default: false
 
     self.slop_opts = opts
     self.parser = Slop::Parser.new(opts)
