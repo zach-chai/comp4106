@@ -1,4 +1,4 @@
-# require 'cloudit/command'
+require 'ai/command'
 
 module AI
   class CLI
@@ -13,11 +13,8 @@ module AI
         nil
       end
 
-      puts "hi"
-      puts command
-
-      # Cloudit::Command.load
-      # Cloudit::Command.run(command, args)
+      AI::Command.load
+      AI::Command.run(command, args)
     end
   end
 end
