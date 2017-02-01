@@ -73,19 +73,33 @@ class AI::Command::Ctp < AI::Command::Base
   end
 
   def breadth_first_search(initial_state)
+    best_end = {}
     state = clone_state(initial_state)
     @search_visits = [clone_state(state)]
     fringe = [state]
 
     while true
+      if state[:p] == @end_position
+        if best_end.empty? || best_end[:t] > state[:t]
+          best_end = state
+        end
+      end
+      update_search_visits(state)
+
       transitions = filter_terminated_paths(@search_visits, valid_transitions(state))
-      if transitions == []
+
+      if transitions != []
+        fringe += transitions
+      end
+      fringe -= [state]
+
+      if fringe == []
         break
       else
-        state = transitions[0]
+        state = fringe.first
       end
     end
-    state
+    best_end
   end
 
   def valid_transitions(current_state)
