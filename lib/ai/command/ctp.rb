@@ -1,4 +1,4 @@
-# require 'ai/command/base'
+require 'ai/command/base'
 
 class AI::Command::Ctp < AI::Command::Base
   VALID_METHODS = ['help']
@@ -188,7 +188,7 @@ class AI::Command::Ctp < AI::Command::Base
     opts.separator ''
     opts.separator 'Ctp options:'
     opts.bool '-h', '--help', 'print options', default: false
-    opts.string '-t', '--times', 'person times', default: DEFAULT_TIMES
+    opts.string '-t', '--times', 'person times e.g. 1,2,3', default: DEFAULT_TIMES
 
     self.slop_opts = opts
     self.parser = Slop::Parser.new(opts)
