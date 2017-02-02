@@ -6,7 +6,7 @@ class AI::Command::Smp < AI::Command::Base
   DEFAULT_SPACES = '1'
   SPACE = 0
 
-  attr_accessor :end_state, :search_visits
+  attr_accessor :end_state, :search_visits, :max_x, :max_y
 
   def index
     if @opts.help?
@@ -16,23 +16,111 @@ class AI::Command::Smp < AI::Command::Base
       blank_spaces = @opts[:blank].to_i
       puts "SMP"
 
-      @end_state = generate_board(board_size, blank_spaces)
-      board = generate_board(board_size, blank_spaces, true)
-      puts @end_state.to_s
-      puts board.to_s
+      b = board_size.split('x')
+      @max_x = b[0].to_i
+      @max_y = b[1].to_i
 
 
+      @end_state = generate_board(blank_spaces)
+      state = generate_board(blank_spaces, true)
+      puts "Goal:"
+      print_state(@end_state)
+      puts "Start:"
+      print_state(state)
+
+require 'byebug'
+
+      puts breadth_first_search(state)
+      print_optimal_transitions
     end
   end
 
-  def generate_board(size, spaces, random = false)
-    require 'byebug'
+  def breadth_first_search(initial_state)
+    node = {s: clone_state(initial_state), p: nil}
+    update_visited_nodes(node)
+    fringe = [node]
+
+    while true
+      # byebug
+      if node[:s] == @end_state
+        return true
+      end
+
+      transitions = filter_visited_nodes(valid_transitions(node))
+      fringe = transitions + fringe
+      fringe -= [node]
+
+      if fringe == []
+        break
+      end
+
+      node = fringe.last
+      update_visited_nodes(node)
+    end
+    false
+  end
+
+  def valid_transitions(current_node)
+    state = clone_state(current_node[:s])
+    transitions = []
+    state.each_with_index do |arr, y|
+      arr.each_with_index do |val, x|
+        if state[y][x] == SPACE
+          # swap up
+          transitions << {s: swap(state, x, y, x, y+1), p: current_node} if y < @max_y - 1
+          # swap right
+          transitions << {s: swap(state, x, y, x+1, y), p: current_node} if x < @max_x - 1
+          # swap down
+          transitions << {s: swap(state, x, y, x, y-1), p: current_node} if y > 0
+          # swap left
+          transitions << {s: swap(state, x, y, x-1, y), p: current_node} if x > 0
+          # TODO add knight move swap
+        end
+      end
+    end
+    transitions
+  end
+
+  def swap(prev_state, x1, y1, x2, y2)
+    state = clone_state(prev_state)
+    temp = state[y2][x2]
+    state[y2][x2] = state[y1][x1]
+    state[y1][x1] = temp
+    state
+  end
+
+  def filter_visited_nodes(transitions)
+    filtered = []
+    transitions.each do |t|
+      if !visited_state?(t[:s])
+        filtered << t
+      end
+    end
+    filtered
+  end
+
+  def visited_state?(state)
+    @search_visits.each_with_index do |visited_state, index|
+      if visited_state[:s] == state
+        return true
+      end
+    end
+    false
+  end
+
+  def update_visited_nodes(node)
+    if @search_visits.nil?
+      @search_visits = []
+    end
+    visited_state?(node[:s])
+    @search_visits << node
+    true
+  end
+
+  def generate_board(spaces, random = false)
     board = []
-    b = size.split('x')
-    b[0] = b[0].to_i
-    b[1] = b[1].to_i
-    
-    a = (1..b[0]*b[1]).to_a
+
+    a = (1..@max_x*@max_y).to_a
     if random
       a.shuffle!
     end
@@ -40,48 +128,40 @@ class AI::Command::Smp < AI::Command::Base
       i = a.find_index(a.max)
       a[i] = SPACE
     end
-    length = b[0]
-    b[1].times do |i|
-      first = i * b[0]
+    length = @max_x
+    @max_y.times do |i|
+      first = i * @max_x
       board << a[first, length]
     end
     board
   end
 
-  def filter_terminated_paths(visited, transitions)
-    filtered = []
-    transitions.each do |t|
-      if !terminated_path?(visited, t)
-        filtered << t
+  def print_optimal_transitions()
+    state = @end_state
+    while state != nil
+      @search_visits.each do |visit|
+        if visit[:s] == state
+          state = visit
+        end
       end
+
+      puts state[:s].to_s
+      state = state[:p]
     end
-    filtered
   end
 
-  def terminated_path?(visited, transition)
-    visited.each do |v|
-      if v[:p] == transition[:p] && v[:t] <= transition[:t]
-        return true
-      end
+  def print_state(state)
+    state.each do |row|
+      puts row.to_s
     end
-    false
   end
 
-  def update_search_visits(state)
-    @search_visits.each_with_index do |visit, index|
-      if visit[:p] == state[:p] && visit[:t] > state[:t]
-        @search_visits[index] = state
-        return true
-      end
-    end
-    @search_visits << clone_state(state)
-    true
+  def clone_node(node)
+    {s: clone_state(node[:s]), p: node[:p]}
   end
 
   def clone_state(state)
-    s = state.clone
-    s[:p] = state[:p].clone
-    s
+    state.map(&:clone) rescue nil
   end
 
   private
