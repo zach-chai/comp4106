@@ -2,7 +2,7 @@ require 'ai/command/base'
 
 class AI::Command::Smp < AI::Command::Base
   VALID_METHODS = ['help']
-  DEFAULT_SIZE = "2x2"
+  DEFAULT_SIZE = "3x3"
   DEFAULT_SPACES = '1'
   SPACE = 0
 
@@ -41,14 +41,15 @@ require 'byebug'
     fringe = [node]
 
     while true
-      # byebug
       if node[:s] == @end_state
+        byebug
         return true
       end
 
       transitions = filter_visited_nodes(valid_transitions(node))
       fringe = transitions + fringe
       fringe -= [node]
+      # fringe.pop
 
       if fringe == []
         break
@@ -56,6 +57,10 @@ require 'byebug'
 
       node = fringe.last
       update_visited_nodes(node)
+      # if @search_visits.size % 250 == 0
+      #   byebug
+      #   fringe = filter_visited_nodes(fringe)
+      # end
     end
     false
   end
@@ -74,6 +79,7 @@ require 'byebug'
           transitions << {s: swap(state, x, y, x, y-1), p: current_node} if y > 0
           # swap left
           transitions << {s: swap(state, x, y, x-1, y), p: current_node} if x > 0
+
           # TODO add knight move swap
         end
       end
@@ -100,20 +106,16 @@ require 'byebug'
   end
 
   def visited_state?(state)
-    @search_visits.each_with_index do |visited_state, index|
-      if visited_state[:s] == state
-        return true
-      end
-    end
-    false
+    @search_visits["#{state.to_s}"]
   end
 
+  # TODO store state as key in hash map or sha1 into an array or binary search
   def update_visited_nodes(node)
     if @search_visits.nil?
-      @search_visits = []
+      @search_visits = {}
     end
     visited_state?(node[:s])
-    @search_visits << node
+    @search_visits["#{node[:s].to_s}"] = node
     true
   end
 
@@ -137,16 +139,12 @@ require 'byebug'
   end
 
   def print_optimal_transitions()
-    state = @end_state
-    while state != nil
-      @search_visits.each do |visit|
-        if visit[:s] == state
-          state = visit
-        end
-      end
+    node = {s: @end_state}
+    while node != nil
+      node = @search_visits["#{node[:s].to_s}"]
 
-      puts state[:s].to_s
-      state = state[:p]
+      puts node[:s].to_s
+      node = node[:p]
     end
   end
 
