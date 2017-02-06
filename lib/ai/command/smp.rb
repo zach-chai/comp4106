@@ -79,7 +79,14 @@ require 'byebug'
           transitions << {s: swap(state, x, y, x, y-1), p: current_node} if y > 0
           # swap left
           transitions << {s: swap(state, x, y, x-1, y), p: current_node} if x > 0
-
+          # swap north-east
+          transitions << {s: swap(state, x, y, x+1, y+1), p: current_node} if x < @max_x - 1 && y < @max_y - 1
+          # swap south-east
+          transitions << {s: swap(state, x, y, x+1, y-1), p: current_node} if x < @max_x - 1 && y > 0
+          # swap south-west
+          transitions << {s: swap(state, x, y, x-1, y-1), p: current_node} if x > 0 && y > 0
+          # swap north-west
+          transitions << {s: swap(state, x, y, x-1, y+1), p: current_node} if x > 0 && y < @max_y - 1
           # TODO add knight move swap
         end
       end
@@ -109,7 +116,6 @@ require 'byebug'
     @search_visits["#{state.to_s}"]
   end
 
-  # TODO store state as key in hash map or sha1 into an array or binary search
   def update_visited_nodes(node)
     if @search_visits.nil?
       @search_visits = {}
