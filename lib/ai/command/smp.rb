@@ -36,7 +36,7 @@ require 'byebug'
   end
 
   def breadth_first_search(initial_state)
-    node = {s: clone_state(initial_state), p: nil}
+    node = {s: clone_state(initial_state), p: {s: true}}
     update_visited_nodes(node)
     fringe = [node]
 
@@ -121,7 +121,7 @@ require 'byebug'
       @search_visits = {}
     end
     visited_state?(node[:s])
-    @search_visits["#{node[:s].to_s}"] = node
+    @search_visits["#{node[:s].to_s}"] = node[:p][:s]
     true
   end
 
@@ -145,12 +145,10 @@ require 'byebug'
   end
 
   def print_optimal_transitions()
-    node = {s: @end_state}
+    node = @end_state
     while node != nil
-      node = @search_visits["#{node[:s].to_s}"]
-
-      puts node[:s].to_s
-      node = node[:p]
+      puts node.to_s
+      node = @search_visits["#{node.to_s}"]
     end
   end
 
@@ -158,10 +156,6 @@ require 'byebug'
     state.each do |row|
       puts row.to_s
     end
-  end
-
-  def clone_node(node)
-    {s: clone_state(node[:s]), p: node[:p]}
   end
 
   def clone_state(state)
