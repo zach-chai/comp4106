@@ -30,12 +30,64 @@ class AI::Command::Smp < AI::Command::Base
 
 require 'byebug'
 
-      # puts breadth_first_search(state)
-      depth_first_search(state).each do |state|
-        puts state.to_s
-      end
-      # print_optimal_transitions
+      # depth_first_search(state).each do |state|
+      #   puts state.to_s
+      # end
+      puts breadth_first_search(state)
+      print_optimal_transitions
     end
+  end
+
+  def depth_first_search(initial_state)
+    node = {s: clone_state(initial_state), p: {s: true}}
+    update_visited_nodes(node)
+    path_visits = [node]
+    max_level = nil
+    best_path = nil
+
+    while true
+      while true
+        if node[:s] == @end_state
+          max_level = path_visits.size - 1
+          best_path = []
+          byebug
+          path_visits.each do |visit|
+            best_path << visit[:s]
+          end
+          break
+        end
+
+        transitions = filter_visited_nodes(valid_transitions(node))
+        if node[:t]
+          transitions = filter_visited_nodes(transitions, node[:t])
+        end
+
+        if transitions == []
+          break
+        end
+
+        node = transitions[0]
+        if max_level.nil? || path_visits.size < max_level
+          update_visited_nodes(node)
+          path_visits << node
+        else
+          break
+        end
+
+      end
+      # remove_visited_nodes(path_visits.pop)
+      popped_node = path_visits.pop
+      if path_visits.empty?
+        break
+      end
+      node = path_visits.last
+      remove_visited_nodes(popped_node)
+      if node[:t].nil?
+        node[:t] = {}
+      end
+      node[:t]["#{popped_node[:s].to_s}"] = true
+    end
+    best_path
   end
 
   def breadth_first_search(initial_state)
