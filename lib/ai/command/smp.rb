@@ -1,9 +1,11 @@
 require 'ai/command/base'
+require 'pqueue'
 
 class AI::Command::Smp < AI::Command::Base
   VALID_METHODS = ['help']
   DEFAULT_SIZE = "3x3"
   DEFAULT_SPACES = '1'
+  DEFAULT_SEARCH = 'bfs'
   SPACE = 0
 
   attr_accessor :end_state, :search_visits, :max_x, :max_y
@@ -14,7 +16,8 @@ class AI::Command::Smp < AI::Command::Base
     else
       board_size = @opts[:size]
       blank_spaces = @opts[:blank].to_i
-      puts "SMP"
+      algorithm = @opts[:algorithm]
+      puts "SMP - #{algorithm}"
 
       b = board_size.split('x')
       @max_x = b[0].to_i
@@ -27,14 +30,20 @@ class AI::Command::Smp < AI::Command::Base
       print_state(@end_state)
       puts "Start:"
       print_state(state)
+      puts "Path:"
 
 require 'byebug'
 
-      # depth_first_search(state).each do |state|
-      #   puts state.to_s
-      # end
-      puts breadth_first_search(state)
-      print_optimal_transitions
+      if algorithm == 'bfs'
+        breadth_first_search(state)
+        print_optimal_transitions
+      elsif algorithm == 'dfs'
+        depth_first_search(state).each do |state|
+          puts state.to_s
+        end
+      elsif algorithm == 'astar'
+        # TODO implement A *
+      end
     end
   end
 
@@ -91,35 +100,31 @@ require 'byebug'
   end
 
   def breadth_first_search(initial_state)
-    node = {s: clone_state(initial_state), p: {s: true}}
+    node = {s: clone_state(initial_state), p: {s: true}, d: distance(initial_state)}
     update_visited_nodes(node)
-    fringe = [node]
+    fringe = PQueue.new([node]){ |a,b| a[:d] < b[:d] }
 
     while true
       if node[:s] == @end_state
-        byebug
         return true
       end
 
       transitions = filter_visited_nodes(valid_transitions(node))
-      fringe = transitions + fringe
-      # fringe -= [node]
-      # fringe.pop
+      fringe_bulk_add(fringe, transitions)
 
-      if fringe == []
+      if fringe.empty?
         break
       end
 
       while visited_state?(node[:s])
-        fringe -= [node]
-        node = fringe.last
+        node = fringe.pop
       end
       update_visited_nodes(node)
-      if @search_visits.size % 1000 == 0
-        # fringe = filter_visited_nodes(fringe)
-        puts "visited states: #{@search_visits.size}"
-        puts "fringe queue: #{fringe.size}"
-      end
+      # if @search_visits.size % 1000 == 0
+      #   # fringe = filter_visited_nodes(fringe)
+      #   puts "visited states: #{@search_visits.size}"
+      #   puts "fringe queue: #{fringe.size}"
+      # end
     end
     false
   end
@@ -159,6 +164,34 @@ require 'byebug'
     state[y2][x2] = state[y1][x1]
     state[y1][x1] = temp
     state
+  end
+
+  def fringe_bulk_add(fringe, transitions)
+    transitions.each do |t|
+      t[:d] = distance(t[:s])
+      fringe << t
+    end
+  end
+
+  def distance(state)
+    total = 0
+    div_y = @max_y + 1
+
+    state.each_with_index do |arr, y|
+      arr.each_with_index do |val, x|
+        if val == 0
+          next
+        end
+        final_y = val / div_y
+        final_x = (val % @max_x) - 1
+        dist_y = (final_y - y).abs
+        dist_x = (final_x - x).abs
+        dist = dist_x > dist_y ? dist_x : dist_y
+        total += dist
+      end
+    end
+
+    total
   end
 
   def filter_visited_nodes(transitions, visited=@search_visits)
@@ -208,9 +241,16 @@ require 'byebug'
 
   def print_optimal_transitions()
     node = @end_state
-    while node != nil
-      puts node.to_s
+    path = []
+    while node != nil && node != true
+      # puts node.to_s
+      path << node
       node = @search_visits["#{node.to_s}"]
+    end
+    path.reverse!
+    path.each_with_index do |s, i|
+      puts "Move #{i}"
+      print_state(s)
     end
   end
 
@@ -234,6 +274,7 @@ require 'byebug'
     opts.bool '-h', '--help', 'print options', default: false
     opts.string '-s', '--size', 'size e.g. 3x3', default: DEFAULT_SIZE
     opts.string '-b', '--blank', 'blank spaces', default: DEFAULT_SPACES
+    opts.string '-a', '--algorithm', 'search algorithm', default: DEFAULT_SEARCH
 
 
     self.slop_opts = opts
