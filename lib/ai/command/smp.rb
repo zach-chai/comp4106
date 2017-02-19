@@ -7,6 +7,7 @@ class AI::Command::Smp < AI::Command::Base
   DEFAULT_SPACES = '1'
   DEFAULT_SEARCH = 'bfs'
   SPACE = 0
+  DEFAULT_HEURISTIC = 'distance'
 
   attr_accessor :end_state, :search_visits, :max_x, :max_y
 
@@ -17,6 +18,7 @@ class AI::Command::Smp < AI::Command::Base
       board_size = @opts[:size]
       blank_spaces = @opts[:blank].to_i
       algorithm = @opts[:algorithm]
+      heuristic = @opts[:heuristic]
       puts "SMP - #{algorithm}"
 
       b = board_size.split('x')
@@ -43,7 +45,8 @@ require 'byebug'
           puts state.to_s
         end
       elsif algorithm == 'astar'
-        # TODO implement A *
+        astar_search(state, heuristic)
+        print_optimal_transitions
       end
     end
   end
@@ -128,7 +131,7 @@ require 'byebug'
     false
   end
 
-  def astar_search(initial_state)
+  def astar_search(initial_state, heuristic)
     node = {s: clone_state(initial_state), p: {s: true}, d: distance(initial_state), m: 0, h: distance(initial_state)}
     update_visited_nodes(node)
     fringe = PQueue.new([node]){ |a,b| a[:h] < b[:h] }
@@ -139,7 +142,7 @@ require 'byebug'
       end
 
       transitions = filter_visited_nodes(valid_transitions(node))
-      fringe_priority_add(fringe, transitions)
+      fringe_priority_add(fringe, transitions, heuristic)
 
       if fringe.empty?
         break
@@ -200,7 +203,18 @@ require 'byebug'
   end
 
   def fringe_priority_add(fringe, transitions, heuristic)
-
+    transitions.each do |t|
+      t[:d] = if heuristic == 'distance'
+        distance(t[:s])
+      elsif heuristic == 'placed'
+        placed(t[:s])
+      elsif heuristic == 'average'
+        distance(t[:s]) + placed(t[:s])
+      end
+      t[:m] = t[:p][:m] + 1
+      t[:h] = t[:d] + t[:m]
+      fringe << t
+    end
   end
 
   def fringe_bulk_add(fringe, transitions)
@@ -210,6 +224,23 @@ require 'byebug'
       t[:h] = t[:d] + t[:m]
       fringe << t
     end
+  end
+
+  def placed(state)
+    total = 0
+    div_y = @max_y + 1
+
+    state.each_with_index do |arr, y|
+      arr.each_with_index do |val, x|
+        final_y = val / div_y
+        final_x = (val - 1) % @max_x
+        dist_y = (final_y - y).abs
+        dist_x = (final_x - x).abs
+        dist = dist_x > dist_y ? dist_x : dist_y
+        total += 1 if dist > 0
+      end
+    end
+    total
   end
 
   def distance(state)
@@ -318,6 +349,7 @@ require 'byebug'
     opts.string '-s', '--size', 'size e.g. 3x3', default: DEFAULT_SIZE
     opts.string '-b', '--blank', 'blank spaces', default: DEFAULT_SPACES
     opts.string '-a', '--algorithm', 'search algorithm', default: DEFAULT_SEARCH
+    opts.string '-u', '--heuristic', 'heuristic for A*', default: DEFAULT_HEURISTIC
 
 
     self.slop_opts = opts
