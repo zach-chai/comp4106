@@ -52,7 +52,7 @@ require 'byebug'
     node = {s: clone_state(initial_state), p: {s: true}}
     update_visited_nodes(node)
     path_visits = [node]
-    max_level = nil
+    max_level = @max_y * @max_x * @max_y * @max_x
     best_path = nil
 
     while true
@@ -128,6 +128,31 @@ require 'byebug'
     false
   end
 
+  def astar_search(initial_state)
+    node = {s: clone_state(initial_state), p: {s: true}, d: distance(initial_state), m: 0, h: distance(initial_state)}
+    update_visited_nodes(node)
+    fringe = PQueue.new([node]){ |a,b| a[:h] < b[:h] }
+
+    while true
+      if node[:s] == @end_state
+        return true
+      end
+
+      transitions = filter_visited_nodes(valid_transitions(node))
+      fringe_priority_add(fringe, transitions)
+
+      if fringe.empty?
+        break
+      end
+
+      while visited_state?(node[:s])
+        node = fringe.pop
+      end
+      update_visited_nodes(node)
+    end
+    false
+  end
+
   def valid_transitions(current_node)
     state = clone_state(current_node[:s])
     transitions = []
@@ -163,6 +188,10 @@ require 'byebug'
     state[y2][x2] = state[y1][x1]
     state[y1][x1] = temp
     state
+  end
+
+  def fringe_priority_add(fringe, transitions, heuristic)
+
   end
 
   def fringe_bulk_add(fringe, transitions)
