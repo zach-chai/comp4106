@@ -26,6 +26,7 @@ class AI::Command::Smp < AI::Command::Base
 
       @end_state = generate_board(blank_spaces)
       state = generate_board(blank_spaces, true)
+
       puts "Goal:"
       print_state(@end_state)
       puts "Start:"
@@ -56,6 +57,7 @@ require 'byebug'
 
     while true
       while true
+        # store solution and drop out loop
         if node[:s] == @end_state
           max_level = path_visits.size - 1
           best_path = []
@@ -66,11 +68,13 @@ require 'byebug'
           break
         end
 
+        # find valid, unvisited transitions
         transitions = filter_visited_nodes(valid_transitions(node))
         if node[:t]
           transitions = filter_visited_nodes(transitions, node[:t])
         end
 
+        # if no transitions then dead end
         if transitions == []
           break
         end
@@ -100,9 +104,9 @@ require 'byebug'
   end
 
   def breadth_first_search(initial_state)
-    node = {s: clone_state(initial_state), p: {s: true}, d: distance(initial_state)}
+    node = {s: clone_state(initial_state), p: {s: true}, d: distance(initial_state), m: 0, h: distance(initial_state)}
     update_visited_nodes(node)
-    fringe = PQueue.new([node]){ |a,b| a[:d] < b[:d] }
+    fringe = PQueue.new([node]){ |a,b| a[:h] < b[:h] }
 
     while true
       if node[:s] == @end_state
@@ -120,11 +124,6 @@ require 'byebug'
         node = fringe.pop
       end
       update_visited_nodes(node)
-      # if @search_visits.size % 1000 == 0
-      #   # fringe = filter_visited_nodes(fringe)
-      #   puts "visited states: #{@search_visits.size}"
-      #   puts "fringe queue: #{fringe.size}"
-      # end
     end
     false
   end
@@ -169,6 +168,8 @@ require 'byebug'
   def fringe_bulk_add(fringe, transitions)
     transitions.each do |t|
       t[:d] = distance(t[:s])
+      t[:m] = t[:p][:m] + 1
+      t[:h] = t[:d] + t[:m]
       fringe << t
     end
   end
@@ -183,7 +184,7 @@ require 'byebug'
           next
         end
         final_y = val / div_y
-        final_x = (val % @max_x) - 1
+        final_x = (val - 1) % @max_x
         dist_y = (final_y - y).abs
         dist_x = (final_x - x).abs
         dist = dist_x > dist_y ? dist_x : dist_y
@@ -262,6 +263,10 @@ require 'byebug'
 
   def clone_state(state)
     state.map(&:clone) rescue nil
+  end
+
+  def factorial(num)
+    (1..num).reduce(:*) || 1
   end
 
   private
