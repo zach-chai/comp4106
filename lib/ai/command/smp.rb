@@ -175,11 +175,20 @@ require 'byebug'
           transitions << {s: swap(state, x, y, x-1, y-1), p: current_node} if x > 0 && y > 0
           # swap north-west
           transitions << {s: swap(state, x, y, x-1, y+1), p: current_node} if x > 0 && y < @max_y - 1
-          # TODO add knight move swap
+        else
+          # Knight swap moves
+          transitions << {s: swap(state, x, y, x+1, y+2), p: current_node} if y < @max_y - 2 && x < @max_x - 1 && state[y+2][x+1] != SPACE
+          transitions << {s: swap(state, x, y, x-1, y+2), p: current_node} if y < @max_y - 2 && x > 0 && state[y+2][x-1] != SPACE
+          transitions << {s: swap(state, x, y, x+1, y-2), p: current_node} if y > 1 && x < @max_x - 1 && state[y-2][x+1] != SPACE
+          transitions << {s: swap(state, x, y, x-1, y-2), p: current_node} if y > 1 && x > 0 && state[y-2][x-1] != SPACE
+          transitions << {s: swap(state, x, y, x+2, y+1), p: current_node} if x < @max_x - 2 && y < @max_y - 1 && state[y+1][x+2] != SPACE
+          transitions << {s: swap(state, x, y, x+2, y-1), p: current_node} if x < @max_x - 2 && y > 0 && state[y-1][x+2] != SPACE
+          transitions << {s: swap(state, x, y, x-2, y+1), p: current_node} if x > 1 && y < @max_y - 1 && state[y+1][x-2] != SPACE
+          transitions << {s: swap(state, x, y, x-2, y-1), p: current_node} if x > 1 && y > 0 && state[y-1][x-2] != SPACE
         end
       end
     end
-    transitions
+    transitions.uniq
   end
 
   def swap(prev_state, x1, y1, x2, y2)
