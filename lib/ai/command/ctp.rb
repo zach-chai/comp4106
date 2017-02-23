@@ -192,7 +192,7 @@ require 'byebug'
       elsif heuristic == 'crossed'
         crossed(t[:s])
       elsif heuristic == 'average'
-        distance(t[:s]) + placed(t[:s])
+        (distance(t[:s]) + crossed(t[:s])) / 2
       end
       t[:h] = t[:d] + t[:t]
       fringe << t
@@ -200,8 +200,13 @@ require 'byebug'
   end
 
   def distance(state)
-    # TODO implement some distance finder
-    0
+    total = 0
+    state.each_with_index do |t, i|
+      if t == 0
+        total += @times[i].to_i
+      end
+    end
+    total
   end
 
   def crossed(state)
