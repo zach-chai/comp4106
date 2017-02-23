@@ -27,10 +27,10 @@ class AI::Command::Ctp < AI::Command::Base
       state = {t: 0}
       visited_states = []
 
-      state[:p] = []
-      state[:p] << 0
+      state[:s] = []
+      state[:s] << 0
       @times.each_with_index do |person, index|
-        state[:p] << 0
+        state[:s] << 0
       end
 
       puts state.to_s
@@ -42,29 +42,29 @@ class AI::Command::Ctp < AI::Command::Base
 
   def depth_first_search(initial_state)
     best_end = {}
-    state = clone_state(initial_state)
-    @search_visits = [clone_state(state)]
-    path_visits = [state]
+    node = clone_state(initial_state)
+    update_search_visits(node)
+    path_visits = [node]
 
     while true
       while true
-        transitions = filter_terminated_paths(@search_visits, valid_transitions(state))
+        transitions = filter_terminated_paths(@search_visits, valid_transitions(node))
         if transitions == []
-          if state[:p] == @end_position
-            if best_end.empty? || best_end[:t] > state[:t]
-              best_end = state
+          if node[:s] == @end_position
+            if best_end.empty? || best_end[:t] > node[:t]
+              best_end = node
               puts path_visits.to_s
             end
           end
           break
         else
-          state = transitions[0]
-          update_search_visits(state)
-          path_visits << state
+          node = transitions[0]
+          update_search_visits(node)
+          path_visits << node
         end
       end
       path_visits.pop
-      state = path_visits.last
+      node = path_visits.last
       if path_visits.empty?
         break
       end
@@ -74,63 +74,63 @@ class AI::Command::Ctp < AI::Command::Base
 
   def breadth_first_search(initial_state)
     best_end = {}
-    state = clone_state(initial_state)
-    @search_visits = [clone_state(state)]
-    fringe = [state]
+    node = clone_state(initial_state)
+    update_search_visits(node)
+    fringe = [node]
 
     while true
-      if state[:p] == @end_position
-        if best_end.empty? || best_end[:t] > state[:t]
-          best_end = state
+      if node[:s] == @end_position
+        if best_end.empty? || best_end[:t] > node[:t]
+          best_end = node
         end
       end
-      update_search_visits(state)
+      update_search_visits(node)
 
-      transitions = filter_terminated_paths(@search_visits, valid_transitions(state))
+      transitions = filter_terminated_paths(@search_visits, valid_transitions(node))
 
       if transitions != []
         fringe += transitions
       end
-      fringe -= [state]
+      fringe -= [node]
 
       if fringe == []
         break
       else
-        state = fringe.first
+        node = fringe.first
       end
     end
     best_end
   end
 
   def valid_transitions(current_state)
-    if current_state[:p] == @end_position
+    if current_state[:s] == @end_position
         return []
     end
 
     states = []
-    torch = current_state[:p][0]
-    if current_state[:p][0] == 0
+    torch = current_state[:s][0]
+    if current_state[:s][0] == 0
       crossers = 2
     else
       crossers = 1
     end
     # crossers = 1
-    current_state[:p].each_with_index do |p, i|
+    current_state[:s].each_with_index do |p, i|
       next if i == 0 || p != torch
 
       state = clone_state(current_state)
 
-      state[:p][0] = (torch + 1) % 2
-      state[:p][i] = (torch + 1) % 2
+      state[:s][0] = (torch + 1) % 2
+      state[:s][i] = (torch + 1) % 2
 
 
       if crossers == 2
-        state[:p].each_with_index do |q, j|
+        state[:s].each_with_index do |q, j|
           next if j < i || q != torch
 
           state2 = clone_state(state)
 
-          state2[:p][j] = (torch + 1) % 2
+          state2[:s][j] = (torch + 1) % 2
 
           state2[:t] += [@times[i - 1], @times[j - 1]].max
           states << state2
@@ -155,28 +155,37 @@ class AI::Command::Ctp < AI::Command::Base
   end
 
   def terminated_path?(visited, transition)
-    visited.each do |v|
-      if v[:p] == transition[:p] && v[:t] <= transition[:t]
-        return true
-      end
-    end
-    false
+    # visited.each do |v|
+    #   if v[:s] == transition[:s] && v[:t] <= transition[:t]
+    #     return true
+    #   end
+    # end
+    # false
+    visited["#{transition[:s].to_s}"] && visited["#{transition[:s].to_s}"][:t] <= transition[:t]
   end
 
-  def update_search_visits(state)
-    @search_visits.each_with_index do |visit, index|
-      if visit[:p] == state[:p] && visit[:t] > state[:t]
-        @search_visits[index] = state
-        return true
-      end
+  def update_search_visits(node)
+    # @search_visits.each_with_index do |visit, index|
+    #   if visit[:s] == state[:s] && visit[:t] > state[:t]
+    #     @search_visits[index] = state
+    #     return true
+    #   end
+    # end
+    # @search_visits << clone_state(state)
+    if @search_visits.nil?
+      @search_visits = {}
     end
-    @search_visits << clone_state(state)
+    if !@search_visits["#{node[:s].to_s}"]
+      @search_visits["#{node[:s].to_s}"] = node
+    elsif @search_visits["#{node[:s].to_s}"][:t] > node[:t]
+      @search_visits["#{node[:s].to_s}"] = node
+    end
     true
   end
 
   def clone_state(state)
     s = state.clone
-    s[:p] = state[:p].clone
+    s[:s] = state[:s].clone
     s
   end
 
