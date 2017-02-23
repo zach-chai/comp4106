@@ -4,6 +4,8 @@ require 'pqueue'
 class AI::Command::Ctp < AI::Command::Base
   VALID_METHODS = ['help']
   DEFAULT_TIMES = "1,2,3,5,8,13"
+  DEFAULT_SEARCH = 'astar'
+  DEFAULT_HEURISTIC = 'crossed'
 
   attr_accessor :times, :end_position, :search_visits
 
@@ -12,6 +14,8 @@ class AI::Command::Ctp < AI::Command::Base
       $stdout.puts slop_opts
     else
       t = @opts[:times]
+      algorithm = @opts[:algorithm]
+      heuristic = @opts[:heuristic]
       puts "CTP"
 
       @times = t.split(',')
@@ -35,10 +39,16 @@ class AI::Command::Ctp < AI::Command::Base
       end
 
       puts state.to_s
+
 require 'byebug'
-      # puts depth_first_search(state).to_s
-      # puts breadth_first_search(state).to_s
-      puts astar_search(state, 'crossed').to_s
+
+      if algorithm == 'bfs'
+        puts breadth_first_search(state).to_s
+      elsif algorithm == 'dfs'
+        puts depth_first_search(state).to_s
+      elsif algorithm == 'astar'
+        puts astar_search(state, heuristic).to_s
+      end
     end
   end
 
@@ -252,6 +262,8 @@ require 'byebug'
     opts.separator 'Ctp options:'
     opts.bool '-h', '--help', 'print options', default: false
     opts.string '-t', '--times', 'person times e.g. 1,2,3', default: DEFAULT_TIMES
+    opts.string '-a', '--algorithm', 'search algorithm', default: DEFAULT_SEARCH
+    opts.string '-u', '--heuristic', 'heuristic for A*', default: DEFAULT_HEURISTIC
 
     self.slop_opts = opts
     self.parser = Slop::Parser.new(opts)
