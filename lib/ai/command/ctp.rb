@@ -1,4 +1,5 @@
 require 'ai/command/base'
+require 'pqueue'
 
 class AI::Command::Ctp < AI::Command::Base
   VALID_METHODS = ['help']
@@ -20,7 +21,7 @@ class AI::Command::Ctp < AI::Command::Base
       @end_position = Array.new(@times.size + 1, 1)
 
 
-      # initial state {t: 0, p: [0,0,0,0,0,0,0]}
+      # initial state {t: 0, s: [0,0,0,0,0,0,0]}
       # 0 means the person is on the left side
       # 1 means the person is on the right side (crossed the bridge)
       # the first position represents the torch
@@ -91,12 +92,11 @@ class AI::Command::Ctp < AI::Command::Base
       if transitions != []
         fringe += transitions
       end
-      fringe -= [node]
 
-      if fringe == []
+      if fringe.empty?
         break
       else
-        node = fringe.first
+        node = fringe.pop
       end
     end
     best_end
