@@ -35,9 +35,10 @@ class AI::Command::Ctp < AI::Command::Base
       end
 
       puts state.to_s
-
+require 'byebug'
       # puts depth_first_search(state).to_s
-      puts breadth_first_search(state).to_s
+      # puts breadth_first_search(state).to_s
+      puts astar_search(state, 'crossed').to_s
     end
   end
 
@@ -102,6 +103,35 @@ class AI::Command::Ctp < AI::Command::Base
     best_end
   end
 
+  def astar_search(initial_state, heuristic)
+    best_end = {}
+    node = clone_state(initial_state)
+    update_search_visits(node)
+    fringe = PQueue.new([]){ |a,b| a[:h] < b[:h] }
+    fringe_priority_add(fringe, [node], heuristic)
+
+    while true
+      if node[:s] == @end_position
+        best_end = node
+        break
+      end
+      update_search_visits(node)
+
+      transitions = filter_terminated_paths(@search_visits, valid_transitions(node))
+
+      if transitions != []
+        fringe_priority_add(fringe, transitions, heuristic)
+      end
+
+      if fringe.empty?
+        break
+      else
+        node = fringe.pop
+      end
+    end
+    best_end
+  end
+
   def valid_transitions(current_state)
     if current_state[:s] == @end_position
         return []
@@ -119,6 +149,7 @@ class AI::Command::Ctp < AI::Command::Base
       next if i == 0 || p != torch
 
       state = clone_state(current_state)
+      # state[:p] = state
 
       state[:s][0] = (torch + 1) % 2
       state[:s][i] = (torch + 1) % 2
@@ -142,6 +173,29 @@ class AI::Command::Ctp < AI::Command::Base
     end
 
     states
+  end
+
+  def fringe_priority_add(fringe, transitions, heuristic)
+    transitions.each do |t|
+      t[:d] = if heuristic == 'distance'
+        distance(t[:s])
+      elsif heuristic == 'crossed'
+        crossed(t[:s])
+      elsif heuristic == 'average'
+        distance(t[:s]) + placed(t[:s])
+      end
+      t[:h] = t[:d] + t[:t]
+      fringe << t
+    end
+  end
+
+  def distance(state)
+    # TODO implement some distance finder
+    0
+  end
+
+  def crossed(state)
+    (state.select { |e| e == 0 }).size
   end
 
   def filter_terminated_paths(visited, transitions)
