@@ -42,13 +42,14 @@ class AI::Command::Ctp < AI::Command::Base
 
 require 'byebug'
 
-      if algorithm == 'bfs'
-        puts breadth_first_search(state).to_s
+      result = if algorithm == 'bfs'
+        breadth_first_search(state)
       elsif algorithm == 'dfs'
-        puts depth_first_search(state).to_s
+        depth_first_search(state)
       elsif algorithm == 'astar'
-        puts astar_search(state, heuristic).to_s
+        astar_search(state, heuristic)
       end
+      print_path(result)
     end
   end
 
@@ -65,7 +66,6 @@ require 'byebug'
           if node[:s] == @end_position
             if best_end.empty? || best_end[:t] > node[:t]
               best_end = node
-              puts path_visits.to_s
             end
           end
           break
@@ -159,7 +159,7 @@ require 'byebug'
       next if i == 0 || p != torch
 
       state = clone_state(current_state)
-      # state[:p] = state
+      state[:p] = current_state
 
       state[:s][0] = (torch + 1) % 2
       state[:s][i] = (torch + 1) % 2
@@ -224,23 +224,10 @@ require 'byebug'
   end
 
   def terminated_path?(visited, transition)
-    # visited.each do |v|
-    #   if v[:s] == transition[:s] && v[:t] <= transition[:t]
-    #     return true
-    #   end
-    # end
-    # false
     visited["#{transition[:s].to_s}"] && visited["#{transition[:s].to_s}"][:t] <= transition[:t]
   end
 
   def update_search_visits(node)
-    # @search_visits.each_with_index do |visit, index|
-    #   if visit[:s] == state[:s] && visit[:t] > state[:t]
-    #     @search_visits[index] = state
-    #     return true
-    #   end
-    # end
-    # @search_visits << clone_state(state)
     if @search_visits.nil?
       @search_visits = {}
     end
@@ -250,6 +237,19 @@ require 'byebug'
       @search_visits["#{node[:s].to_s}"] = node
     end
     true
+  end
+
+  def print_path(node)
+    path = []
+    while node != nil
+      path << {s: node[:s], t: node[:t]}
+      node = node[:p]
+    end
+    path.reverse!
+    path.each_with_index do |s, i|
+      puts "Move #{i}"
+      puts s.to_s
+    end
   end
 
   def clone_state(state)
