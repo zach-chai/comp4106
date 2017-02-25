@@ -187,19 +187,19 @@ require 'byebug'
 
   def fringe_priority_add(fringe, transitions, heuristic)
     transitions.each do |t|
-      t[:d] = if heuristic == 'distance'
-        distance(t[:s])
+      t[:d] = if heuristic == 'weighted_crossed'
+        weighted_crossed(t[:s])
       elsif heuristic == 'crossed'
         crossed(t[:s])
       elsif heuristic == 'average'
-        (distance(t[:s]) + crossed(t[:s])) / 2
+        (weighted_crossed(t[:s]) + crossed(t[:s])) / 2
       end
-      t[:h] = t[:d] + t[:t]
+      t[:h] = t[:d] + (t[:t] * 2)
       fringe << t
     end
   end
 
-  def distance(state)
+  def weighted_crossed(state)
     total = 0
     state.each_with_index do |t, i|
       if t == 0
