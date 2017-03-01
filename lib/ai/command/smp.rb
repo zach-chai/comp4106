@@ -35,14 +35,13 @@ class AI::Command::Smp < AI::Command::Base
       print_state(state)
       puts "Path:"
 
-require 'byebug'
-
       if algorithm == 'bfs'
         breadth_first_search(state)
         print_optimal_transitions
       elsif algorithm == 'dfs'
-        depth_first_search(state).each do |state|
-          puts state.to_s
+        depth_first_search(state).each_with_index do |s, i|
+          puts "Move #{i}"
+          print_state(s)
         end
       elsif algorithm == 'astar'
         astar_search(state, heuristic)
@@ -64,7 +63,6 @@ require 'byebug'
         if node[:s] == @end_state
           max_level = path_visits.size - 1
           best_path = []
-          byebug
           path_visits.each do |visit|
             best_path << visit[:s]
           end
@@ -110,7 +108,7 @@ require 'byebug'
     node = {s: clone_state(initial_state), p: {s: true}, d: distance(initial_state), m: 0, h: distance(initial_state)}
     update_visited_nodes(node)
     fringe = PQueue.new([node]){ |a,b| a[:h] < b[:h] }
-
+    sleep 4
     while true
       if node[:s] == @end_state
         return true
