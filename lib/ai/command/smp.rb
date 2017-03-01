@@ -205,11 +205,11 @@ require 'byebug'
   def fringe_priority_add(fringe, transitions, heuristic)
     transitions.each do |t|
       t[:d] = if heuristic == 'distance'
-        distance(t[:s])
+        distance(t[:s]) * 0.7
       elsif heuristic == 'placed'
         placed(t[:s])
       elsif heuristic == 'average'
-        distance(t[:s]) + placed(t[:s])
+        (distance(t[:s]) + placed(t[:s])) / 2
       end
       t[:m] = t[:p][:m] + 1
       t[:h] = t[:d] + t[:m]
@@ -219,7 +219,7 @@ require 'byebug'
 
   def fringe_bulk_add(fringe, transitions)
     transitions.each do |t|
-      t[:d] = distance(t[:s])
+      t[:d] = placed(t[:s])
       t[:m] = t[:p][:m] + 1
       t[:h] = t[:d] + t[:m]
       fringe << t
