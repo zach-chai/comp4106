@@ -23,7 +23,17 @@ class AI::Command::Focus < AI::Command::Base
       @board = Board.new(@size)
       @board.populate
       @board.print_state
-      @board.move('b2', 'b3')
+      # @board.move('b2', 'b3')
+      # @board.print_state
+      start_game
+    end
+  end
+
+  def start_game
+    input = nil
+    while input != 'exit'
+      input = $stdin.gets
+      @board.move(input)
       @board.print_state
     end
   end
@@ -50,7 +60,13 @@ class AI::Command::Focus < AI::Command::Base
       @board.push(Array.new(size4, EMPTY_SPACE)) if size4 > 0
     end
 
-    def move(src, dest)
+    def move(src, dest=nil)
+      if !dest
+        dest = src.split('.')
+        src = dest[0]
+        dest = dest[1]
+      end
+
       extra_pieces = 0
       src_stack = position(src)
       dest_stack = position(dest)
@@ -95,8 +111,8 @@ class AI::Command::Focus < AI::Command::Base
     end
 
     def print_state
-      spacing = "%10s "
-      printf " %10s %10s %10s %10s %10s %10s %10s %10s\n", *(('A'..'H').to_a)
+      spacing = "%15s "
+      printf " %15s %15s %15s %15s %15s %15s %15s %15s\n", *(('A'..'H').to_a)
       num = 1
 
       board.each_with_index do |row, i|
