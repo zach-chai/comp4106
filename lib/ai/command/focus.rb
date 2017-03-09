@@ -9,6 +9,7 @@ class AI::Command::Focus < AI::Command::Base
   PLAYER_TWO = 1
   EMPTY_SPACE = []
   NULL_SPACE = nil
+  INPUT_SEPARATOR = '.'
 
   # attr_accessor :size, :board
 
@@ -32,8 +33,12 @@ class AI::Command::Focus < AI::Command::Base
   def start_game
     input = nil
     while input != 'exit'
+      puts 'Enter a move e.g. 1.b2.b3'
       input = $stdin.gets
-      @board.move(input)
+      unless extra_pieces = @board.move(input)
+        puts 'Invalid move'
+        next
+      end
       @board.print_state
     end
   end
@@ -60,26 +65,64 @@ class AI::Command::Focus < AI::Command::Base
       @board.push(Array.new(size4, EMPTY_SPACE)) if size4 > 0
     end
 
-    def move(src, dest=nil)
-      if !dest
-        dest = src.split('.')
-        src = dest[0]
-        dest = dest[1]
+    def move(input)
+      input = input.split(INPUT_SEPARATOR)
+      size = input[0].to_i
+      src = Position.new({string: input[1]})
+      dest = Position.new({string: input[2]})
+
+      unless verify_move(size, src, dest)
+        return false
       end
 
       extra_pieces = 0
-      src_stack = position(src)
-      dest_stack = position(dest)
+      src_stack = stack_at_position(src)
+      move_stack = src_stack[0...size]
+      remain_stack = src_stack[size...src_stack.size]
+      dest_stack = stack_at_position(dest)
 
       if pieces = src_stack.size + dest_stack.size > 5
         extra_pieces = pieces - 5
       end
 
-      new_stack = src_stack + dest_stack
+      new_stack = move_stack + dest_stack
       set_position(dest, new_stack)
-      set_position(src, EMPTY_SPACE)
+      set_position(src, remain_stack)
 
       extra_pieces
+    end
+
+    def verify_move(size, src, dest)
+
+      # verify input is within board spec
+      if size > 5 || size < 1
+        return false
+      elsif src.column >= 8 || src.row > 8 || dest.column >= 8 || dest.row > 8
+        return false
+      elsif src.column < 0 || src.row < 1 || dest.column < 0 || dest.row < 1
+        return false
+      end
+
+      # verify enough pieces to move exist
+      if stack_at_position(src).size < size
+        return false
+      end
+
+      # verify moves are not diagonal
+      if src.row != dest.row && src.column != dest.column
+        return false
+      end
+
+      # verify distance within number of pieces moved
+      dist = (src.row + src.column - dest.row - dest.column).abs
+      if dist > size
+        return false
+      end
+
+      true
+    rescue => e
+      puts e
+      false
     end
 
     def populate
@@ -135,9 +178,9 @@ class AI::Command::Focus < AI::Command::Base
       end
     end
 
-    def position(pos)
-      row = pos[1].to_i
-      column = letter_to_num(pos[0])
+    def stack_at_position(pos)
+      row = pos.row
+      column = pos.column
       reduce = 0
       if row == 1 || row == 8
         reduce = 2
@@ -148,8 +191,8 @@ class AI::Command::Focus < AI::Command::Base
     end
 
     def set_position(pos, value)
-      row = pos[1].to_i
-      column = letter_to_num(pos[0])
+      row = pos.row
+      column = pos.column
       reduce = 0
       if row == 1 || row == 8
         reduce = 2
@@ -157,6 +200,21 @@ class AI::Command::Focus < AI::Command::Base
         reduce = 1
       end
       board[row - 1][column - reduce] = value
+    end
+
+    def letter_to_num(letter)
+      LETTERS.index(letter.downcase)
+    end
+  end
+
+  class Position
+    LETTERS = ('a'..'h').to_a
+
+    attr_accessor :row, :column
+
+    def initialize(opts = {})
+      @column = letter_to_num(opts[:string][0])
+      @row = opts[:string][1].to_i
     end
 
     def letter_to_num(letter)
