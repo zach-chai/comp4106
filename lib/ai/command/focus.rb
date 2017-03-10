@@ -85,7 +85,7 @@ class AI::Command::Focus < AI::Command::Base
       src = Position.new({string: input[1]})
       dest = Position.new({string: input[2]})
 
-      unless verify_move(size, src, dest)
+      unless verify_move(size, src, dest, player_id)
         return false
       end
 
@@ -93,10 +93,6 @@ class AI::Command::Focus < AI::Command::Base
       move_stack = src_stack[0...size]
       remain_stack = src_stack[size...src_stack.size]
       dest_stack = stack_at_position(dest)
-
-      # if (pieces = move_stack.size + dest_stack.size) > 5
-      #   self.send(:"player#{player + 1}=", pieces - 5)
-      # end
 
       removed_stack = (move_stack + dest_stack)
       new_stack = removed_stack.shift(5)
@@ -109,7 +105,7 @@ class AI::Command::Focus < AI::Command::Base
       set_position(src, remain_stack)
     end
 
-    def verify_move(size, src, dest)
+    def verify_move(size, src, dest, player)
 
       # verify input is within board spec
       if size > 5 || size < 1
@@ -136,10 +132,15 @@ class AI::Command::Focus < AI::Command::Base
         return false
       end
 
+      # verify player owns top piece on stack
+      if stack_at_position(src)[0] != player
+        return false
+      end
+
       true
-    rescue => e
-      puts e
-      false
+    # rescue => e
+    #   puts e
+    #   false
     end
 
     def populate
