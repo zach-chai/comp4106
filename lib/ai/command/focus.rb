@@ -22,6 +22,7 @@ class AI::Command::Focus < AI::Command::Base
     else
       @size = @opts[:size].to_i
       @num_players = @opts[:players].to_i
+
       @players = [PLAYER_ONE, PLAYER_TWO]
       @players << PLAYER_THREE if @num_players > 2
       @players << PLAYER_FOUR if @num_players > 3
@@ -80,31 +81,35 @@ class AI::Command::Focus < AI::Command::Base
       return node
     end
     transitions.map! do |trans|
-      {node: trans, value: minimax(trans, 0, player, player, nil)}
+      {node: trans, value: minimax(trans, 0, player, player)}
     end
     max = (transitions.map {|t| t[:value]}).max
     transitions.select! {|t| t[:value] == max}
     transitions.sample[:node]
   end
 
-  def minimax(node, depth, player_perspective, max_player, heuristic)
+  def minimax(node, depth, player_perspective, max_player)
     transitions = valid_transitions(node, player_perspective)
     if depth == 0 || transitions.empty?
-      return moveable(node.state, player_perspective)
+      if max_player == PLAYER_ONE || max_player == PLAYER_THREE
+        return captured(node.state, player_perspective)
+      else
+        return moveable(node.state, player_perspective)
+      end
     end
     next_player = (player_perspective + 1) % @num_players
 
     if player_perspective == max_player
       best_value = -999
       transitions.each do |child|
-        best_value = [minimax(child, depth - 1, next_player, max_player, heuristic),
+        best_value = [minimax(child, depth - 1, next_player, max_player),
                       best_value].max
       end
       return best_value
     else
       best_value = 999
       transitions.each do |child|
-        best_value = [minimax(child, depth - 1, next_player, max_player, heuristic),
+        best_value = [minimax(child, depth - 1, next_player, max_player),
                       best_value].min
       end
       return best_value
@@ -127,7 +132,7 @@ class AI::Command::Focus < AI::Command::Base
 
   # maximize the number of captured pieces
   def captured(state, player)
-    state.send(:"player#{player}")[:captured]
+    state.send(:"player#{player}")[:captured] + moveable(state, player)
   end
 
   def valid_transitions(current_node, player)
