@@ -9,7 +9,7 @@ ENV RAILS_ENV=development \
 RUN mkdir $APP_HOME
 WORKDIR $APP_HOME
 
-RUN gem install rake pqueue slop byebug
+RUN gem install rake pqueue slop byebug ruby_deep_clone
 
 ADD . $APP_HOME
 RUN bundle
