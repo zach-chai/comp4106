@@ -16,36 +16,35 @@ class AI::Command::Focus < AI::Command::Base
   INPUT_SEPARATOR = '.'
   LETTERS = ('a'..'h').to_a
 
-  # attr_accessor :size, :board
-
   def index
     if @opts.help?
       $stdout.puts slop_opts
     else
       @size = @opts[:size].to_i
-
-      puts @size
+      @num_players = @opts[:players].to_i
+      @players = [PLAYER_ONE, PLAYER_TWO]
+      @players << PLAYER_THREE if @num_players > 2
+      @players << PLAYER_FOUR if @num_players > 3
 
       @board = State.new(@size)
       @board.populate
-      @board.move('1.b1.b2', PLAYER_ONE)
-      @board.move('2.b2.b3', PLAYER_ONE)
-      @board.move('3.b3.b4', PLAYER_ONE)
-      @board.move('4.b4.b5', PLAYER_ONE)
-      @board.move('1.c1.c2', PLAYER_ONE)
-      @board.move('2.c2.c3', PLAYER_ONE)
-      @board.move('3.c3.c4', PLAYER_ONE)
-      @board.move('4.c4.c5', PLAYER_ONE)
-      @board.move('1.f1.f0', PLAYER_ONE)
-      @board.move('1.f6.f7', PLAYER_TWO)
+      # @board.move('1.b1.b2', PLAYER_ONE)
+      # @board.move('2.b2.b3', PLAYER_ONE)
+      # @board.move('3.b3.b4', PLAYER_ONE)
+      # @board.move('4.b4.b5', PLAYER_ONE)
+      # @board.move('1.c1.c2', PLAYER_ONE)
+      # @board.move('2.c2.c3', PLAYER_ONE)
+      # @board.move('3.c3.c4', PLAYER_ONE)
+      # @board.move('4.c4.c5', PLAYER_ONE)
+      # @board.move('1.f1.f0', PLAYER_ONE)
+      # @board.move('1.f6.f7', PLAYER_TWO)
       @board.print_state
-      transitions = valid_transitions(Node.new(@board, nil), PLAYER_ONE)
+      start_computer_game
       byebug
-      start_game
     end
   end
 
-  def start_game
+  def start_human_game
     input = nil
     while input != 'exit'
       puts 'Enter a move'
@@ -58,13 +57,66 @@ class AI::Command::Focus < AI::Command::Base
     end
   end
 
+  def start_computer_game
+    node = Node.new(@board, nil)
+    while true
+      node = find_best(node, PLAYER_ONE) if @players.count(PLAYER_ONE) > 0
+      node = find_best(node, PLAYER_TWO) if @players.count(PLAYER_TWO) > 0
+      node = find_best(node, PLAYER_THREE) if @players.count(PLAYER_THREE) > 0
+      node = find_best(node, PLAYER_FOUR) if @players.count(PLAYER_FOUR) > 0
+      node.state.print_state
+      if @players.count == 1
+        break
+      end
+    end
+    puts "Player #{@players[0]} won!"
+  end
+
+  def find_best(node, player)
+    transitions = valid_transitions(node, player)
+    if transitions.empty?
+      @players.delete(player)
+      return node
+    end
+    transitions.map! do |trans|
+      {node: trans, value: minimax(trans, 0, player, player, nil)}
+    end
+    max = (transitions.map {|t| t[:value]}).max
+    transitions.select! {|t| t[:value] == max}
+    transitions.sample[:node]
+  end
+
+  def minimax(node, depth, player_perspective, max_player, heuristic)
+    transitions = valid_transitions(node, player_perspective)
+    if depth == 0 || transitions.empty?
+      return moveable(node.state, player_perspective)
+    end
+    next_player = (player_perspective + 1) % @num_players
+
+    if player_perspective == max_player
+      best_value = -999
+      transitions.each do |child|
+        best_value = [minimax(child, depth - 1, next_player, max_player, heuristic),
+                      best_value].max
+      end
+      return best_value
+    else
+      best_value = 999
+      transitions.each do |child|
+        best_value = [minimax(child, depth - 1, next_player, max_player, heuristic),
+                      best_value].min
+      end
+      return best_value
+    end
+  end
+
   # maximizes the number of moveable stacks (stacks with your piece at the top)
-  def moveable(board_obj, player)
+  def moveable(state, player)
     count = 0
-    board = board_obj.board
+    board = state.board
     board.each_with_index do |row, r|
       row.each_with_index do |stack, s|
-        if stack && stack[player]
+        if stack && stack[0] == player
           count += 1
         end
       end
@@ -73,8 +125,8 @@ class AI::Command::Focus < AI::Command::Base
   end
 
   # maximize the number of captured pieces
-  def captured(board, player)
-    board.send(:"player#{player}")[:captured]
+  def captured(state, player)
+    state.send(:"player#{player}")[:captured]
   end
 
   def valid_transitions(current_node, player)
@@ -192,8 +244,8 @@ class AI::Command::Focus < AI::Command::Base
       new_stack = removed_stack.shift(5)
 
       player_info = self.send(:"player#{player_id}")
-      player_info[:pieces] = removed_stack.count(player_id)
-      player_info[:captured] = removed_stack.size - removed_stack.count(player_id)
+      player_info[:pieces] += removed_stack.count(player_id)
+      player_info[:captured] += removed_stack.size - removed_stack.count(player_id)
 
       set_position(dest, new_stack)
       set_position(src, remain_stack)
@@ -371,7 +423,7 @@ class AI::Command::Focus < AI::Command::Base
     opts.separator 'Smp options:'
     opts.bool '-h', '--help', 'print options', default: false
     opts.string '-s', '--size', 'size e.g. 3x3', default: DEFAULT_SIZE.to_s
-    opts.string '-p', '--player', 'number of players', default: DEFAULT_PLAYERS.to_s
+    opts.string '-p', '--players', 'number of players', default: DEFAULT_PLAYERS.to_s
 
 
     self.slop_opts = opts
