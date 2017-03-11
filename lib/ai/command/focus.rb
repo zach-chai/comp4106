@@ -40,6 +40,7 @@ class AI::Command::Focus < AI::Command::Base
       # @board.move('1.f6.f7', PLAYER_TWO)
       @board.print_state
       start_computer_game
+      # start_human_game
       byebug
     end
   end
@@ -404,7 +405,7 @@ class AI::Command::Focus < AI::Command::Base
     def initialize(opts = {})
       @column = letter_to_num(opts[:string][0])
       @row = opts[:string][1].to_i
-      if !@column || !@row
+      if !@column || !@row || opts[:string].length > 2
         raise "invalid Position spec"
       end
     end
