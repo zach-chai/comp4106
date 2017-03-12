@@ -161,7 +161,7 @@ class AI::Command::Focus < AI::Command::Base
   end
 
   def heuristic1(state, player)
-    control(state, player) + captured(state, player) + moveable(state, player)
+    control(state, player) + captured(state, player) + moveable(state, player) * 2
   end
 
   def heuristic2(state, player)
