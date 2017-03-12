@@ -34,10 +34,10 @@ class AI::Command::Focus < AI::Command::Base
         @board.populate4
       end
 
-      # @board.move('1.b1.b2', PLAYER_ONE)
-      # @board.move('2.b2.b3', PLAYER_ONE)
-      # @board.move('3.b3.b4', PLAYER_ONE)
-      # @board.move('4.b4.b5', PLAYER_ONE)
+      # @board.move('1.b6.b5', PLAYER_ONE)
+      # @board.move('2.b5.b4', PLAYER_ONE)
+      # @board.move('3.b4.b3', PLAYER_ONE)
+      # @board.move('4.b3.b2', PLAYER_ONE)
       # @board.move('1.c1.c2', PLAYER_ONE)
       # @board.move('2.c2.c3', PLAYER_ONE)
       # @board.move('3.c3.c4', PLAYER_ONE)
@@ -56,7 +56,7 @@ class AI::Command::Focus < AI::Command::Base
     while input != 'exit'
       puts 'Enter a move'
       input = $stdin.gets
-      unless @board.move(input, PLAYER_ONE)
+      unless @board.move(input.chomp, PLAYER_ONE)
         puts 'Invalid move'
         next
       end
@@ -281,6 +281,11 @@ class AI::Command::Focus < AI::Command::Base
         return false
       end
 
+      # cannot move stack to its occupying square
+      if src.eql(dest)
+        return false
+      end
+
       # verify input is within board spec
       if size > 5 || size < 1
         return false
@@ -439,6 +444,10 @@ class AI::Command::Focus < AI::Command::Base
       if !@column || !@row || opts[:string].length > 2
         raise "invalid Position spec"
       end
+    end
+
+    def eql(pos)
+      self.row == pos.row && self.column == pos.column
     end
 
     def letter_to_num(letter)
