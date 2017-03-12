@@ -32,24 +32,25 @@ class AI::Command::Focus < AI::Command::Base
       @players << PLAYER_THREE if @num_players > 2
       @players << PLAYER_FOUR if @num_players > 3
 
-      @board = State.new(@size)
+      board = State.new(@size)
       if @num_players == 2
-        @board.populate2
+        board.populate2
       elsif @num_players == 4
-        @board.populate4
+        board.populate4
       end
 
-      # @board.move('1.b6.b5', PLAYER_ONE)
-      # @board.move('2.b5.b4', PLAYER_ONE)
-      # @board.move('3.b4.b3', PLAYER_ONE)
-      # @board.move('4.b3.b2', PLAYER_ONE)
-      # @board.move('1.c1.c2', PLAYER_ONE)
-      # @board.move('2.c2.c3', PLAYER_ONE)
-      # @board.move('3.c3.c4', PLAYER_ONE)
-      # @board.move('4.c4.c5', PLAYER_ONE)
-      # @board.move('1.f1.f0', PLAYER_ONE)
-      # @board.move('1.f6.f7', PLAYER_TWO)
-      @board.print_state
+      # board.move('1.b6.b5', PLAYER_ONE)
+      # board.move('2.b5.b4', PLAYER_ONE)
+      # board.move('3.b4.b3', PLAYER_ONE)
+      # board.move('4.b3.b2', PLAYER_ONE)
+      # board.move('1.c1.c2', PLAYER_ONE)
+      # board.move('2.c2.c3', PLAYER_ONE)
+      # board.move('3.c3.c4', PLAYER_ONE)
+      # board.move('4.c4.c5', PLAYER_ONE)
+      # board.move('1.f1.f0', PLAYER_ONE)
+      # board.move('1.f6.f7', PLAYER_TWO)
+      board.print_state
+      @node = Node.new(board, nil)
 
       start_computer_game
       # start_human_game
@@ -70,23 +71,22 @@ class AI::Command::Focus < AI::Command::Base
   end
 
   def start_computer_game
-    node = Node.new(@board, nil)
     while true
       if @players.count(PLAYER_ONE) > 0
-        node = find_best(node, PLAYER_ONE)
-        update_view(node)
+        @node = find_best(@node, PLAYER_ONE)
+        update_view
       end
       if @players.count(PLAYER_TWO) > 0
-        node = find_best(node, PLAYER_TWO)
-        update_view(node)
+        @node = find_best(@node, PLAYER_TWO)
+        update_view
       end
       if @players.count(PLAYER_THREE) > 0
-        node = find_best(node, PLAYER_THREE)
-        update_view(node)
+        @node = find_best(@node, PLAYER_THREE)
+        update_view
       end
       if @players.count(PLAYER_FOUR) > 0
-        node = find_best(node, PLAYER_FOUR)
-        update_view(node)
+        @node = find_best(@node, PLAYER_FOUR)
+        update_view
       end
       if @players.count == 1
         break
@@ -95,8 +95,8 @@ class AI::Command::Focus < AI::Command::Base
     puts "Player #{@players[0]} won!"
   end
 
-  def update_view(node)
-    node.state.print_state
+  def update_view
+    @node.state.print_state
     if @sleep
       sleep @sleep
     end
@@ -132,7 +132,7 @@ class AI::Command::Focus < AI::Command::Base
       if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
         return captured(node.state, player_perspective)
       else
-        return moveable(node.state, player_perspective)
+        return control(node.state, player_perspective)
       end
     end
     next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
@@ -160,32 +160,19 @@ class AI::Command::Focus < AI::Command::Base
     end
   end
 
-  def minimax(node, depth, player_perspective, max_player)
-    transitions = valid_transitions(node, player_perspective)
-    if depth == 0 || transitions.empty?
-      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
-        return captured(node.state, player_perspective)
-      else
-        return moveable(node.state, player_perspective)
+  # maximize yours stacks try to have to most biggest stacks
+  def control(state, player)
+    player_info = state.send(:"player#{player}")
+    count = 0
+    board = state.board
+    board.each_with_index do |row, r|
+      row.each_with_index do |stack, s|
+        if stack && stack[0] == player
+          count += stack.size
+        end
       end
     end
-    next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
-
-    if player_perspective == max_player
-      best_value = -9999
-      transitions.each do |child|
-        best_value = [minimax(child, depth - 1, next_player, max_player),
-                      best_value].max
-      end
-      return best_value
-    else
-      best_value = 9999
-      transitions.each do |child|
-        best_value = [minimax(child, depth - 1, next_player, max_player),
-                      best_value].min
-      end
-      return best_value
-    end
+    count + (player_info[:captured] * 2)
   end
 
   # maximizes the number of moveable stacks (stacks with your piece at the top)
@@ -204,7 +191,9 @@ class AI::Command::Focus < AI::Command::Base
 
   # maximize the number of captured pieces
   def captured(state, player)
-    state.send(:"player#{player}")[:captured] + moveable(state, player)
+    player_info = state.send(:"player#{player}")
+    moveable(state, player)
+      + (player_info[:captured] * 3)
   end
 
   def valid_transitions(current_node, player)
@@ -229,7 +218,7 @@ class AI::Command::Focus < AI::Command::Base
             num_pieces.times do
               input = "#{num_pieces}.#{letter}#{r_coord}.#{letter}#{r_coord+modifier}"
               if state.move(input, player, true)
-                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+                transitions << Node.new(state.deep_clone.move(input, player), nil)
               end
               modifier += 1
             end
@@ -237,7 +226,7 @@ class AI::Command::Focus < AI::Command::Base
             num_pieces.times do
               input = "#{num_pieces}.#{letter}#{r_coord}.#{letter}#{r_coord-modifier}"
               if state.move(input, player, true)
-                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+                transitions << Node.new(state.deep_clone.move(input, player), nil)
               end
               modifier += 1
             end
@@ -245,7 +234,7 @@ class AI::Command::Focus < AI::Command::Base
             num_pieces.times do
               input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[LETTERS.index(letter)+modifier]}#{r_coord}"
               if state.move(input, player, true)
-                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+                transitions << Node.new(state.deep_clone.move(input, player), nil)
               end
               modifier += 1
             end
@@ -253,7 +242,7 @@ class AI::Command::Focus < AI::Command::Base
             num_pieces.times do
               input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[LETTERS.index(letter)-modifier]}#{r_coord}"
               if state.move(input, player, true)
-                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+                transitions << Node.new(state.deep_clone.move(input, player), nil)
               end
               modifier += 1
             end
@@ -262,7 +251,7 @@ class AI::Command::Focus < AI::Command::Base
         end
         input = "#{letter}#{r_coord}"
         if state.place(input, player, true)
-          transitions << Node.new(state.deep_clone.move(input, player), current_node)
+          transitions << Node.new(state.deep_clone.move(input, player), nil)
         end
       end
     end
