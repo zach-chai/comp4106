@@ -122,17 +122,17 @@ class AI::Command::Focus < AI::Command::Base
   def alphabeta(node, depth, player_perspective, max_player, alpha, beta)
     if depth == 0
       if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
-        return captured(node.state, player_perspective)
+        return heuristic1(node.state, max_player)
       else
-        return moveable(node.state, player_perspective)
+        return heuristic2(node.state, max_player)
       end
     end
     transitions = valid_transitions(node, player_perspective)
     if transitions.empty?
       if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
-        return captured(node.state, player_perspective)
+        return heuristic1(node.state, max_player)
       else
-        return control(node.state, player_perspective)
+        return heuristic2(node.state, max_player)
       end
     end
     next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
@@ -160,6 +160,14 @@ class AI::Command::Focus < AI::Command::Base
     end
   end
 
+  def heuristic1(state, player)
+    control(state, player) + captured(state, player) + moveable(state, player)
+  end
+
+  def heuristic2(state, player)
+    control(state, player) + captured(state, player) * 2
+  end
+
   # maximize yours stacks try to have to most biggest stacks
   def control(state, player)
     player_info = state.send(:"player#{player}")
@@ -172,7 +180,7 @@ class AI::Command::Focus < AI::Command::Base
         end
       end
     end
-    count + (player_info[:captured] * 2)
+    count
   end
 
   # maximizes the number of moveable stacks (stacks with your piece at the top)
@@ -191,9 +199,7 @@ class AI::Command::Focus < AI::Command::Base
 
   # maximize the number of captured pieces
   def captured(state, player)
-    player_info = state.send(:"player#{player}")
-    moveable(state, player)
-      + (player_info[:captured] * 3)
+    player_info = state.send(:"player#{player}")[:captured]
   end
 
   def valid_transitions(current_node, player)
