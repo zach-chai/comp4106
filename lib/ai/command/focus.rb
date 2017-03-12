@@ -1,5 +1,6 @@
 require 'ai/command/base'
 require 'byebug'
+require 'deep_clone'
 
 class AI::Command::Focus < AI::Command::Base
   VALID_METHODS = ['help']
@@ -13,38 +14,49 @@ class AI::Command::Focus < AI::Command::Base
   EMPTY_SPACE = []
   NULL_SPACE = nil
   INPUT_SEPARATOR = '.'
-
-  # attr_accessor :size, :board
+  LETTERS = ('a'..'h').to_a
 
   def index
     if @opts.help?
       $stdout.puts slop_opts
     else
       @size = @opts[:size].to_i
+      @num_players = @opts[:players].to_i
 
-      puts @size
+      @players = [PLAYER_ONE, PLAYER_TWO]
+      @players << PLAYER_THREE if @num_players > 2
+      @players << PLAYER_FOUR if @num_players > 3
 
-      @board = Board.new(@size)
-      @board.populate
-      @board.move('1.b2.b3', PLAYER_ONE)
-      @board.move('2.b3.b4', PLAYER_ONE)
-      @board.move('3.b4.b5', PLAYER_ONE)
-      @board.move('4.b5.b6', PLAYER_ONE)
-      @board.move('1.c2.c3', PLAYER_ONE)
-      @board.move('2.c3.c4', PLAYER_ONE)
-      @board.move('3.c4.c5', PLAYER_ONE)
-      @board.move('4.c5.c6', PLAYER_ONE)
+      @board = State.new(@size)
+      if @num_players == 2
+        @board.populate2
+      elsif @num_players == 4
+        @board.populate4
+      end
+
+      # @board.move('1.b6.b5', PLAYER_ONE)
+      # @board.move('2.b5.b4', PLAYER_ONE)
+      # @board.move('3.b4.b3', PLAYER_ONE)
+      # @board.move('4.b3.b2', PLAYER_ONE)
+      # @board.move('1.c1.c2', PLAYER_ONE)
+      # @board.move('2.c2.c3', PLAYER_ONE)
+      # @board.move('3.c3.c4', PLAYER_ONE)
+      # @board.move('4.c4.c5', PLAYER_ONE)
+      # @board.move('1.f1.f0', PLAYER_ONE)
+      # @board.move('1.f6.f7', PLAYER_TWO)
       @board.print_state
-      start_game
+
+      start_computer_game
+      # start_human_game
     end
   end
 
-  def start_game
+  def start_human_game
     input = nil
     while input != 'exit'
       puts 'Enter a move'
       input = $stdin.gets
-      unless @board.move(input, PLAYER_ONE)
+      unless @board.move(input.chomp, PLAYER_ONE)
         puts 'Invalid move'
         next
       end
@@ -52,9 +64,202 @@ class AI::Command::Focus < AI::Command::Base
     end
   end
 
-  class Board
+  def start_computer_game
+    node = Node.new(@board, nil)
+    while true
+      if @players.count(PLAYER_ONE) > 0
+        node = find_best(node, PLAYER_ONE)
+        node.state.print_state
+      end
+      if @players.count(PLAYER_TWO) > 0
+        node = find_best(node, PLAYER_TWO)
+        node.state.print_state
+      end
+      if @players.count(PLAYER_THREE) > 0
+        node = find_best(node, PLAYER_THREE)
+        node.state.print_state
+      end
+      if @players.count(PLAYER_FOUR) > 0
+        node = find_best(node, PLAYER_FOUR)
+        node.state.print_state
+      end
+      if @players.count == 1
+        break
+      end
+    end
+    puts "Player #{@players[0]} won!"
+  end
 
-    LETTERS = ('a'..'h').to_a
+  def find_best(node, player)
+    transitions = valid_transitions(node, player)
+    if transitions.empty?
+      @players.delete(player)
+      return node
+    end
+    transitions.map! do |trans|
+      {node: trans, value: alphabeta(trans, 1, player, player, -9999, 9999)}
+    end
+    max = (transitions.map {|t| t[:value]}).max
+    transitions.select! {|t| t[:value] == max}
+    transitions.sample[:node]
+  end
+
+  def alphabeta(node, depth, player_perspective, max_player, alpha, beta)
+    if depth == 0
+      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
+        return captured(node.state, player_perspective)
+      else
+        return moveable(node.state, player_perspective)
+      end
+    end
+    transitions = valid_transitions(node, player_perspective)
+    if transitions.empty?
+      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
+        return captured(node.state, player_perspective)
+      else
+        return moveable(node.state, player_perspective)
+      end
+    end
+    next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
+
+    if player_perspective == max_player
+      value = -9999
+      transitions.each do |child|
+        value = [alphabeta(child, depth - 1, next_player, max_player, alpha, beta), value].max
+        alpha = [alpha, value].max
+        if beta <= alpha
+          break
+        end
+      end
+      return value
+    else
+      value = 9999
+      transitions.each do |child|
+        value = [alphabeta(child, depth - 1, next_player, max_player, alpha, beta), value].min
+        beta = [beta, value].min
+        if beta <= alpha
+          break
+        end
+      end
+      return value
+    end
+  end
+
+  def minimax(node, depth, player_perspective, max_player)
+    transitions = valid_transitions(node, player_perspective)
+    if depth == 0 || transitions.empty?
+      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
+        return captured(node.state, player_perspective)
+      else
+        return moveable(node.state, player_perspective)
+      end
+    end
+    next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
+
+    if player_perspective == max_player
+      best_value = -9999
+      transitions.each do |child|
+        best_value = [minimax(child, depth - 1, next_player, max_player),
+                      best_value].max
+      end
+      return best_value
+    else
+      best_value = 9999
+      transitions.each do |child|
+        best_value = [minimax(child, depth - 1, next_player, max_player),
+                      best_value].min
+      end
+      return best_value
+    end
+  end
+
+  # maximizes the number of moveable stacks (stacks with your piece at the top)
+  def moveable(state, player)
+    count = 0
+    board = state.board
+    board.each_with_index do |row, r|
+      row.each_with_index do |stack, s|
+        if stack && stack[0] == player
+          count += 1
+        end
+      end
+    end
+    count
+  end
+
+  # maximize the number of captured pieces
+  def captured(state, player)
+    state.send(:"player#{player}")[:captured] + moveable(state, player)
+  end
+
+  def valid_transitions(current_node, player)
+    state = current_node.state
+    transitions = []
+    state.board.each_with_index do |row, r_coord|
+      valid_letters = if row.size == 4
+        LETTERS[2...6]
+      elsif row.size == 6
+        LETTERS[1...7]
+      else
+        LETTERS
+      end
+      valid_letters.each_with_index do |letter, c_coord|
+        # byebug
+        stack = state.stack_at_position(Position.new({string: "#{letter}#{r_coord}"}))
+        if stack && stack[0] == player
+          num_pieces = 1
+          stack.size.times do
+            modifier = 1
+            num_pieces.times do
+              input = "#{p}.#{letter}#{r_coord}.#{letter}#{r_coord+modifier}"
+              if state.move(input, player, true)
+                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+              end
+              modifier += 1
+            end
+            modifier = 1
+            num_pieces.times do
+              input = "#{num_pieces}.#{letter}#{r_coord}.#{letter}#{r_coord-modifier}"
+              if state.move(input, player, true)
+                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+              end
+              modifier += 1
+            end
+            modifier = 1
+            num_pieces.times do
+              input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[c_coord+modifier]}#{r_coord}"
+              if state.move(input, player, true)
+                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+              end
+              modifier += 1
+            end
+            modifier = 1
+            num_pieces.times do
+              input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[c_coord-modifier]}#{r_coord}"
+              if state.move(input, player, true)
+                transitions << Node.new(state.deep_clone.move(input, player), current_node)
+              end
+              modifier += 1
+            end
+            num_pieces += 1
+          end
+        end
+      end
+    end
+    transitions
+  end
+
+  class Node
+
+    attr_accessor :state, :parent
+
+    def initialize(state, parent)
+      @state = state
+      @parent = parent
+    end
+  end
+
+  class State
 
     attr_accessor :board, :size, :player1, :player2, :player3, :player4
 
@@ -79,14 +284,18 @@ class AI::Command::Focus < AI::Command::Base
       @player4 = {pieces: 0, captured: 0}
     end
 
-    def move(input, player_id)
+    # input - 1.b2.b3
+    def move(input, player_id, verify_only=false)
       input = input.split(INPUT_SEPARATOR)
       size = input[0].to_i
-      src = Position.new({string: input[1]})
-      dest = Position.new({string: input[2]})
+      src = Position.new({string: input[1]}) rescue nil
+      dest = Position.new({string: input[2]}) rescue nil
 
       unless verify_move(size, src, dest, player_id)
         return false
+      end
+      if verify_only
+        return true
       end
 
       src_stack = stack_at_position(src)
@@ -98,21 +307,34 @@ class AI::Command::Focus < AI::Command::Base
       new_stack = removed_stack.shift(5)
 
       player_info = self.send(:"player#{player_id}")
-      player_info[:pieces] = removed_stack.count(player_id)
-      player_info[:captured] = removed_stack.size - removed_stack.count(player_id)
+      player_info[:pieces] += removed_stack.count(player_id)
+      player_info[:captured] += removed_stack.size - removed_stack.count(player_id)
 
       set_position(dest, new_stack)
       set_position(src, remain_stack)
+      self
     end
 
     def verify_move(size, src, dest, player)
 
+      # nil check
+      if !src || !dest || !size || !player
+        return false
+      end
+
+      # cannot move stack to its occupying square
+      if src.eql(dest)
+        return false
+      end
+
       # verify input is within board spec
       if size > 5 || size < 1
         return false
-      elsif src.column >= 8 || src.row > 8 || dest.column >= 8 || dest.row > 8
+      elsif stack_at_position(src).nil? || stack_at_position(dest).nil?
         return false
-      elsif src.column < 0 || src.row < 1 || dest.column < 0 || dest.row < 1
+      elsif src.column >= 8 || src.row > 7 || dest.column >= 8 || dest.row > 7
+        return false
+      elsif src.column < 0 || src.row < 0 || dest.column < 0 || dest.row < 0
         return false
       end
 
@@ -138,12 +360,9 @@ class AI::Command::Focus < AI::Command::Base
       end
 
       true
-    # rescue => e
-    #   puts e
-    #   false
     end
 
-    def populate
+    def populate2
       if size == DEFAULT_SIZE
         @board.map!.with_index do |arr, y|
           if y == 0 || y == DEFAULT_SIZE - 1
@@ -171,10 +390,23 @@ class AI::Command::Focus < AI::Command::Base
       end
     end
 
+    def populate4
+      @board = []
+      @board << [[PLAYER_ONE], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_THREE]]
+      @board << [[PLAYER_THREE], [PLAYER_THREE], [PLAYER_THREE], [PLAYER_TWO], [PLAYER_THREE]]
+      @board << [[PLAYER_ONE], [PLAYER_ONE], [PLAYER_ONE], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_THREE], [PLAYER_TWO]]
+      @board << [[PLAYER_THREE], [PLAYER_THREE], [PLAYER_THREE], [PLAYER_THREE], [PLAYER_TWO], [PLAYER_THREE], [PLAYER_TWO], [PLAYER_THREE]]
+      @board << [[PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_FOUR], [PLAYER_FOUR], [PLAYER_FOUR]]
+      @board << [[PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_TWO], [PLAYER_TWO], [PLAYER_TWO]]
+      @board << [[PLAYER_ONE], [PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_FOUR], [PLAYER_FOUR]]
+      @board << [[PLAYER_FOUR], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_TWO]]
+      @board
+    end
+
     def print_state
       spacing = "%15s "
       printf " %15s %15s %15s %15s %15s %15s %15s %15s\n", *(('A'..'H').to_a)
-      num = 1
+      num = 0
 
       board.each_with_index do |row, i|
         formatting = ""
@@ -206,28 +438,39 @@ class AI::Command::Focus < AI::Command::Base
       row = pos.row
       column = pos.column
       reduce = 0
-      if row == 1 || row == 8
+      if row == 0 || row == 7
         reduce = 2
-      elsif row == 2 || row == 7
+      elsif row == 1 || row == 6
         reduce = 1
       end
-      board[row - 1][column - reduce]
+      if column - reduce >= 0
+        board[row][column - reduce]
+      else
+        nil
+      end
     end
 
     def set_position(pos, value)
       row = pos.row
       column = pos.column
       reduce = 0
-      if row == 1 || row == 8
+      if row == 0 || row == 7
         reduce = 2
-      elsif row == 2 || row == 7
+      elsif row == 1 || row == 6
         reduce = 1
       end
-      board[row - 1][column - reduce] = value
+      if column - reduce < 0
+        raise "position out of bounds"
+      end
+      board[row][column - reduce] = value
     end
 
     def letter_to_num(letter)
       LETTERS.index(letter.downcase)
+    end
+
+    def deep_clone
+      DeepClone.clone(self)
     end
   end
 
@@ -239,6 +482,13 @@ class AI::Command::Focus < AI::Command::Base
     def initialize(opts = {})
       @column = letter_to_num(opts[:string][0])
       @row = opts[:string][1].to_i
+      if !@column || !@row || opts[:string].length > 2
+        raise "invalid Position spec"
+      end
+    end
+
+    def eql(pos)
+      self.row == pos.row && self.column == pos.column
     end
 
     def letter_to_num(letter)
@@ -255,7 +505,7 @@ class AI::Command::Focus < AI::Command::Base
     opts.separator 'Smp options:'
     opts.bool '-h', '--help', 'print options', default: false
     opts.string '-s', '--size', 'size e.g. 3x3', default: DEFAULT_SIZE.to_s
-    opts.string '-p', '--player', 'number of players', default: DEFAULT_PLAYERS.to_s
+    opts.string '-p', '--players', 'number of players', default: DEFAULT_PLAYERS.to_s
 
 
     self.slop_opts = opts
