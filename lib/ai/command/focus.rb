@@ -28,7 +28,12 @@ class AI::Command::Focus < AI::Command::Base
       @players << PLAYER_FOUR if @num_players > 3
 
       @board = State.new(@size)
-      @board.populate
+      if @num_players == 2
+        @board.populate2
+      elsif @num_players == 4
+        @board.populate4
+      end
+
       # @board.move('1.b1.b2', PLAYER_ONE)
       # @board.move('2.b2.b3', PLAYER_ONE)
       # @board.move('3.b3.b4', PLAYER_ONE)
@@ -40,9 +45,9 @@ class AI::Command::Focus < AI::Command::Base
       # @board.move('1.f1.f0', PLAYER_ONE)
       # @board.move('1.f6.f7', PLAYER_TWO)
       @board.print_state
+
       start_computer_game
       # start_human_game
-      byebug
     end
   end
 
@@ -62,11 +67,22 @@ class AI::Command::Focus < AI::Command::Base
   def start_computer_game
     node = Node.new(@board, nil)
     while true
-      node = find_best(node, PLAYER_ONE) if @players.count(PLAYER_ONE) > 0
-      node = find_best(node, PLAYER_TWO) if @players.count(PLAYER_TWO) > 0
-      node = find_best(node, PLAYER_THREE) if @players.count(PLAYER_THREE) > 0
-      node = find_best(node, PLAYER_FOUR) if @players.count(PLAYER_FOUR) > 0
-      node.state.print_state
+      if @players.count(PLAYER_ONE) > 0
+        node = find_best(node, PLAYER_ONE)
+        node.state.print_state
+      end
+      if @players.count(PLAYER_TWO) > 0
+        node = find_best(node, PLAYER_TWO)
+        node.state.print_state
+      end
+      if @players.count(PLAYER_THREE) > 0
+        node = find_best(node, PLAYER_THREE)
+        node.state.print_state
+      end
+      if @players.count(PLAYER_FOUR) > 0
+        node = find_best(node, PLAYER_FOUR)
+        node.state.print_state
+      end
       if @players.count == 1
         break
       end
@@ -91,7 +107,7 @@ class AI::Command::Focus < AI::Command::Base
   def minimax(node, depth, player_perspective, max_player)
     transitions = valid_transitions(node, player_perspective)
     if depth == 0 || transitions.empty?
-      if max_player == PLAYER_ONE || max_player == PLAYER_THREE
+      if max_player == PLAYER_ONE || max_player == PLAYER_TWO
         return captured(node.state, player_perspective)
       else
         return moveable(node.state, player_perspective)
@@ -298,12 +314,9 @@ class AI::Command::Focus < AI::Command::Base
       end
 
       true
-    # rescue => e
-    #   puts e
-    #   false
     end
 
-    def populate
+    def populate2
       if size == DEFAULT_SIZE
         @board.map!.with_index do |arr, y|
           if y == 0 || y == DEFAULT_SIZE - 1
@@ -329,6 +342,19 @@ class AI::Command::Focus < AI::Command::Base
           end
         end
       end
+    end
+
+    def populate4
+      @board = []
+      @board << [[PLAYER_ONE], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_THREE]]
+      @board << [[PLAYER_THREE], [PLAYER_THREE], [PLAYER_THREE], [PLAYER_TWO], [PLAYER_THREE]]
+      @board << [[PLAYER_ONE], [PLAYER_ONE], [PLAYER_ONE], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_THREE], [PLAYER_TWO]]
+      @board << [[PLAYER_THREE], [PLAYER_THREE], [PLAYER_THREE], [PLAYER_THREE], [PLAYER_TWO], [PLAYER_THREE], [PLAYER_TWO], [PLAYER_THREE]]
+      @board << [[PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_FOUR], [PLAYER_FOUR], [PLAYER_FOUR]]
+      @board << [[PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_TWO], [PLAYER_TWO], [PLAYER_TWO]]
+      @board << [[PLAYER_ONE], [PLAYER_FOUR], [PLAYER_ONE], [PLAYER_FOUR], [PLAYER_FOUR], [PLAYER_FOUR]]
+      @board << [[PLAYER_FOUR], [PLAYER_ONE], [PLAYER_TWO], [PLAYER_TWO]]
+      @board
     end
 
     def print_state
