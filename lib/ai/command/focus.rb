@@ -97,33 +97,74 @@ class AI::Command::Focus < AI::Command::Base
       return node
     end
     transitions.map! do |trans|
-      {node: trans, value: minimax(trans, 0, player, player)}
+      {node: trans, value: alphabeta(trans, 1, player, player, -9999, 9999)}
     end
     max = (transitions.map {|t| t[:value]}).max
     transitions.select! {|t| t[:value] == max}
     transitions.sample[:node]
   end
 
-  def minimax(node, depth, player_perspective, max_player)
-    transitions = valid_transitions(node, player_perspective)
-    if depth == 0 || transitions.empty?
-      if max_player == PLAYER_ONE || max_player == PLAYER_TWO
+  def alphabeta(node, depth, player_perspective, max_player, alpha, beta)
+    if depth == 0
+      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
         return captured(node.state, player_perspective)
       else
         return moveable(node.state, player_perspective)
       end
     end
-    next_player = (player_perspective + 1) % @num_players
+    transitions = valid_transitions(node, player_perspective)
+    if transitions.empty?
+      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
+        return captured(node.state, player_perspective)
+      else
+        return moveable(node.state, player_perspective)
+      end
+    end
+    next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
 
     if player_perspective == max_player
-      best_value = -999
+      value = -9999
+      transitions.each do |child|
+        value = [alphabeta(child, depth - 1, next_player, max_player, alpha, beta), value].max
+        alpha = [alpha, value].max
+        if beta <= alpha
+          break
+        end
+      end
+      return value
+    else
+      value = 9999
+      transitions.each do |child|
+        value = [alphabeta(child, depth - 1, next_player, max_player, alpha, beta), value].min
+        beta = [beta, value].min
+        if beta <= alpha
+          break
+        end
+      end
+      return value
+    end
+  end
+
+  def minimax(node, depth, player_perspective, max_player)
+    transitions = valid_transitions(node, player_perspective)
+    if depth == 0 || transitions.empty?
+      if max_player == PLAYER_ONE || max_player == PLAYER_FOUR
+        return captured(node.state, player_perspective)
+      else
+        return moveable(node.state, player_perspective)
+      end
+    end
+    next_player = @players[(@players.index(player_perspective) + 1) % @players.count]
+
+    if player_perspective == max_player
+      best_value = -9999
       transitions.each do |child|
         best_value = [minimax(child, depth - 1, next_player, max_player),
                       best_value].max
       end
       return best_value
     else
-      best_value = 999
+      best_value = 9999
       transitions.each do |child|
         best_value = [minimax(child, depth - 1, next_player, max_player),
                       best_value].min
