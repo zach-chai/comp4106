@@ -97,7 +97,7 @@ class AI::Command::Focus < AI::Command::Base
       return node
     end
     transitions.map! do |trans|
-      {node: trans, value: alphabeta(trans, 1, player, player, -9999, 9999)}
+      {node: trans, value: alphabeta(trans, 0, player, player, -9999, 9999)}
     end
     max = (transitions.map {|t| t[:value]}).max
     transitions.select! {|t| t[:value] == max}
@@ -204,14 +204,15 @@ class AI::Command::Focus < AI::Command::Base
         LETTERS
       end
       valid_letters.each_with_index do |letter, c_coord|
-        # byebug
         stack = state.stack_at_position(Position.new({string: "#{letter}#{r_coord}"}))
         if stack && stack[0] == player
+          # byebug
           num_pieces = 1
           stack.size.times do
+            # byebug
             modifier = 1
             num_pieces.times do
-              input = "#{p}.#{letter}#{r_coord}.#{letter}#{r_coord+modifier}"
+              input = "#{num_pieces}.#{letter}#{r_coord}.#{letter}#{r_coord+modifier}"
               if state.move(input, player, true)
                 transitions << Node.new(state.deep_clone.move(input, player), current_node)
               end
@@ -227,7 +228,7 @@ class AI::Command::Focus < AI::Command::Base
             end
             modifier = 1
             num_pieces.times do
-              input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[c_coord+modifier]}#{r_coord}"
+              input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[LETTERS.index(letter)+modifier]}#{r_coord}"
               if state.move(input, player, true)
                 transitions << Node.new(state.deep_clone.move(input, player), current_node)
               end
@@ -235,7 +236,7 @@ class AI::Command::Focus < AI::Command::Base
             end
             modifier = 1
             num_pieces.times do
-              input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[c_coord-modifier]}#{r_coord}"
+              input = "#{num_pieces}.#{letter}#{r_coord}.#{LETTERS[LETTERS.index(letter)-modifier]}#{r_coord}"
               if state.move(input, player, true)
                 transitions << Node.new(state.deep_clone.move(input, player), current_node)
               end
@@ -243,6 +244,10 @@ class AI::Command::Focus < AI::Command::Base
             end
             num_pieces += 1
           end
+        end
+        input = "#{letter}#{r_coord}"
+        if state.place(input, player, true)
+          transitions << Node.new(state.deep_clone.move(input, player), current_node)
         end
       end
     end
@@ -284,9 +289,12 @@ class AI::Command::Focus < AI::Command::Base
       @player4 = {pieces: 0, captured: 0}
     end
 
-    # input - 1.b2.b3
+    # input - 1.b2.b3 | b5
     def move(input, player_id, verify_only=false)
       input = input.split(INPUT_SEPARATOR)
+      if input.size == 1
+        return place(input[0], player_id)
+      end
       size = input[0].to_i
       src = Position.new({string: input[1]}) rescue nil
       dest = Position.new({string: input[2]}) rescue nil
@@ -315,6 +323,48 @@ class AI::Command::Focus < AI::Command::Base
       self
     end
 
+    def place(input, player_id, verify_only=false)
+      dest = Position.new({string: input}) rescue nil
+
+      unless verify_place(dest, player_id)
+        return false
+      end
+      if verify_only
+        return true
+      end
+
+      dest_stack = stack_at_position(dest)
+
+      removed_stack = ([player_id] + dest_stack)
+      new_stack = removed_stack.shift(5)
+
+      player_info = self.send(:"player#{player_id}")
+      player_info[:pieces] += removed_stack.count(player_id) - 1
+      player_info[:captured] += removed_stack.size - removed_stack.count(player_id)
+
+      set_position(dest, new_stack)
+      self
+    end
+
+    def verify_place(dest, player)
+
+      # verify pieces available to be placed
+      if self.send(:"player#{player}")[:pieces] <= 0
+        return false
+      end
+
+      # verify input is within board spec
+      if dest.column > 7 || dest.row > 7
+        return false
+      elsif dest.column < 0 || dest.row < 0
+        return false
+      elsif stack_at_position(dest).nil?
+        return false
+      end
+
+      true
+    end
+
     def verify_move(size, src, dest, player)
 
       # nil check
@@ -330,11 +380,11 @@ class AI::Command::Focus < AI::Command::Base
       # verify input is within board spec
       if size > 5 || size < 1
         return false
-      elsif stack_at_position(src).nil? || stack_at_position(dest).nil?
-        return false
       elsif src.column >= 8 || src.row > 7 || dest.column >= 8 || dest.row > 7
         return false
       elsif src.column < 0 || src.row < 0 || dest.column < 0 || dest.row < 0
+        return false
+      elsif stack_at_position(src).nil? || stack_at_position(dest).nil?
         return false
       end
 
@@ -403,6 +453,19 @@ class AI::Command::Focus < AI::Command::Base
       @board
     end
 
+    # def populate_test
+    #   @board = []
+    #   @board << [[],[],[],[]]
+    #   @board << [[1],[],[],[],[],[]]
+    #   @board << [[],[],[],[],[],[],[],[]]
+    #   @board << [[],[],[],[],[],[],[],[]]
+    #   @board << [[],[],[],[],[],[],[],[]]
+    #   @board << [[],[],[],[],[],[],[],[]]
+    #   @board << [[],[],[],[],[],[]]
+    #   @board << [[],[],[],[]]
+    #   @board
+    # end
+
     def print_state
       spacing = "%15s "
       printf " %15s %15s %15s %15s %15s %15s %15s %15s\n", *(('A'..'H').to_a)
@@ -444,6 +507,9 @@ class AI::Command::Focus < AI::Command::Base
         reduce = 1
       end
       if column - reduce >= 0
+        if board.nil? || board[row].nil?
+          byebug
+        end
         board[row][column - reduce]
       else
         nil
