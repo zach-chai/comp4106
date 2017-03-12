@@ -6,6 +6,8 @@ class AI::Command::Focus < AI::Command::Base
   VALID_METHODS = ['help']
   DEFAULT_SIZE = 8
   DEFAULT_PLAYERS = 2
+  DEFAULT_DEPTH = 0
+  DEFAULT_SLEEP = 0
   SMALL_SIZE = 4
   PLAYER_ONE = 1
   PLAYER_TWO = 2
@@ -20,8 +22,11 @@ class AI::Command::Focus < AI::Command::Base
     if @opts.help?
       $stdout.puts slop_opts
     else
-      @size = @opts[:size].to_i
+      @size = DEFAULT_SIZE
       @num_players = @opts[:players].to_i
+      @depth = @opts[:depth].to_i
+      @sleep = @opts[:sleep].to_i
+      @debug = @opts[:debug]
 
       @players = [PLAYER_ONE, PLAYER_TWO]
       @players << PLAYER_THREE if @num_players > 2
@@ -69,25 +74,35 @@ class AI::Command::Focus < AI::Command::Base
     while true
       if @players.count(PLAYER_ONE) > 0
         node = find_best(node, PLAYER_ONE)
-        node.state.print_state
+        update_view(node)
       end
       if @players.count(PLAYER_TWO) > 0
         node = find_best(node, PLAYER_TWO)
-        node.state.print_state
+        update_view(node)
       end
       if @players.count(PLAYER_THREE) > 0
         node = find_best(node, PLAYER_THREE)
-        node.state.print_state
+        update_view(node)
       end
       if @players.count(PLAYER_FOUR) > 0
         node = find_best(node, PLAYER_FOUR)
-        node.state.print_state
+        update_view(node)
       end
       if @players.count == 1
         break
       end
     end
     puts "Player #{@players[0]} won!"
+  end
+
+  def update_view(node)
+    node.state.print_state
+    if @sleep
+      sleep @sleep
+    end
+    if @debug
+      byebug
+    end
   end
 
   def find_best(node, player)
@@ -97,7 +112,7 @@ class AI::Command::Focus < AI::Command::Base
       return node
     end
     transitions.map! do |trans|
-      {node: trans, value: alphabeta(trans, 0, player, player, -9999, 9999)}
+      {node: trans, value: alphabeta(trans, @depth, player, player, -9999, 9999)}
     end
     max = (transitions.map {|t| t[:value]}).max
     transitions.select! {|t| t[:value] == max}
@@ -570,8 +585,10 @@ class AI::Command::Focus < AI::Command::Base
     opts.separator ''
     opts.separator 'Smp options:'
     opts.bool '-h', '--help', 'print options', default: false
-    opts.string '-s', '--size', 'size e.g. 3x3', default: DEFAULT_SIZE.to_s
-    opts.string '-p', '--players', 'number of players', default: DEFAULT_PLAYERS.to_s
+    opts.string '-p', '--players', 'number of players 2|4', default: DEFAULT_PLAYERS.to_s
+    opts.string '-d', '--depth', 'depth 1|2', default: DEFAULT_DEPTH.to_s
+    opts.string '-s', '--sleep', 'sleep time in seconds', DEFAULT_SLEEP.to_s
+    opts.bool '-b', '--debug', 'debug mode', default: false
 
 
     self.slop_opts = opts
