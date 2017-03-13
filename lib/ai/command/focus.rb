@@ -27,6 +27,7 @@ class AI::Command::Focus < AI::Command::Base
       @depth = @opts[:depth].to_i
       @sleep = @opts[:sleep].to_i
       @debug = @opts[:debug]
+      @human = @opts[:interactive]
 
       @players = [PLAYER_ONE, PLAYER_TWO]
       @players << PLAYER_THREE if @num_players > 2
@@ -53,27 +54,30 @@ class AI::Command::Focus < AI::Command::Base
       @node = Node.new(board, nil)
 
       start_computer_game
-      # start_human_game
     end
   end
 
-  def start_human_game
+  def human_move
     input = nil
-    while input != 'exit'
+    while true
       puts 'Enter a move'
       input = $stdin.gets
-      unless @board.move(input.chomp, PLAYER_ONE)
+      unless @node.state.move(input.chomp, PLAYER_ONE)
         puts 'Invalid move'
         next
       end
-      @board.print_state
+      break
     end
   end
 
   def start_computer_game
     while true
       if @players.count(PLAYER_ONE) > 0
-        @node = find_best(@node, PLAYER_ONE)
+        if @human
+          human_move
+        else
+          @node = find_best(@node, PLAYER_ONE)
+        end
         update_view
       end
       if @players.count(PLAYER_TWO) > 0
@@ -584,6 +588,7 @@ class AI::Command::Focus < AI::Command::Base
     opts.string '-d', '--depth', 'depth 1|2', default: DEFAULT_DEPTH.to_s
     opts.string '-s', '--sleep', 'sleep time in seconds', DEFAULT_SLEEP.to_s
     opts.bool '-b', '--debug', 'debug mode', default: false
+    opts.bool '-i', '--interactive', 'interactive mode', default: false
 
 
     self.slop_opts = opts
