@@ -1,4 +1,5 @@
 require 'ai/command/base'
+require 'graphviz'
 
 class AI::Command::Ml < AI::Command::Base
   VALID_METHODS = ['help']
@@ -7,8 +8,8 @@ class AI::Command::Ml < AI::Command::Base
     if @opts.help?
       $stdout.puts slop_opts
     else
-      @features = 10
-      @classes = 4
+      @num_features = 10
+      @num_classes = 4
 
       puts "ML"
 
@@ -21,6 +22,19 @@ class AI::Command::Ml < AI::Command::Base
 
   end
 
+  def gen_dep_tree
+    tree = []
+    tree << Node.new(0, nil)
+    tree << Node.new(1, tree[0])
+    tree << Node.new(2, tree[0])
+    tree << Node.new(3, tree[1])
+    tree << Node.new(4, tree[1])
+    tree << Node.new(5, tree[2])
+    tree << Node.new(6, tree[3])
+    tree << Node.new(7, tree[4])
+    tree << Node.new(8, tree[2])
+    tree << Node.new(9, tree[3])
+  end
 
   class DependenceTree
 
