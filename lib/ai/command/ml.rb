@@ -13,8 +13,8 @@ class AI::Command::Ml < AI::Command::Base
 
       puts "ML"
 
-
-
+      dep_tree = DependenceTree.new(gen_dep_list)
+      dep_tree.output_graph
     end
   end
 
@@ -22,18 +22,19 @@ class AI::Command::Ml < AI::Command::Base
 
   end
 
-  def gen_dep_tree
-    tree = []
-    tree << Node.new(0, nil)
-    tree << Node.new(1, tree[0])
-    tree << Node.new(2, tree[0])
-    tree << Node.new(3, tree[1])
-    tree << Node.new(4, tree[1])
-    tree << Node.new(5, tree[2])
-    tree << Node.new(6, tree[3])
-    tree << Node.new(7, tree[4])
-    tree << Node.new(8, tree[2])
-    tree << Node.new(9, tree[3])
+  def gen_dep_list
+    list = []
+    list << Node.new(0, nil)
+    list << Node.new(1, list[0])
+    list << Node.new(2, list[0])
+    list << Node.new(3, list[1])
+    list << Node.new(4, list[1])
+    list << Node.new(5, list[2])
+    list << Node.new(6, list[3])
+    list << Node.new(7, list[4])
+    list << Node.new(8, list[2])
+    list << Node.new(9, list[3])
+    list
   end
 
   class DependenceTree
@@ -49,11 +50,31 @@ class AI::Command::Ml < AI::Command::Base
     end
 
     def feature_parent(feature)
-      list[feature].parent()
+      list[feature].parent
     end
 
     def root_feature
       list[0]
+    end
+
+    def output_graph
+      g = GraphViz.new( :G, :type => :digraph )
+      glist = []
+
+      # Create two nodes
+      list.each do |node|
+        glist << g.add_nodes(node.feature.to_s)
+      end
+
+      # Create edges between the nodes
+      list.each do |node|
+        if node.parent
+          g.add_edges(glist[node.parent.feature], glist[node.feature])
+        end
+      end
+
+      # Generate output image
+      g.output( :png => "dependence_tree.png" )
     end
   end
 
