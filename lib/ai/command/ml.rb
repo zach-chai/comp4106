@@ -10,16 +10,66 @@ class AI::Command::Ml < AI::Command::Base
     else
       @num_features = 10
       @num_classes = 4
+      @num_samples = 200
 
       puts "ML"
 
-      dep_tree = DependenceTree.new(gen_dep_list)
-      dep_tree.output_graph
+      data_generation
     end
   end
 
-  def gen_class_probabilities
+  def data_generation
+    classes = []
+    dep_tree = DependenceTree.new(gen_dep_list)
 
+    @num_classes.times.with_index do |i|
+      probs_list = gen_dependence_probabilities(dep_tree)
+      samples = gen_samples(i, @num_samples, probs_list, dep_tree)
+      classes << {probabilities: probs_list, samples: samples}
+    end
+    byebug
+    # dep_tree.output_graph
+  end
+
+  def gen_dependence_probabilities(dependence_tree)
+    tree = dependence_tree
+    probs_list = []
+    probs_list << Random.rand.round(2)
+    (tree.list.count - 1).times do
+      probs_list << [Random.rand.round(2), Random.rand.round(2)]
+    end
+    probs_list
+  end
+
+  def gen_samples(class_num, num_samples, probs_list, dep_tree)
+    samples = []
+    num_samples.times do
+      samples << gen_sample(class_num, probs_list, dep_tree)
+    end
+    samples
+  end
+
+  def gen_sample(class_num, probs_list, dep_tree)
+    sample = Array.new(10)
+    node = dep_tree.root
+    sample[node.feature] = weighted_rand(probs_list[node.feature])
+    node.children.each do |child|
+      gen_sample_rec(sample, child, probs_list)
+    end
+    sample << class_num
+    sample
+  end
+
+  def gen_sample_rec(sample, node, probs_list)
+    parent_sample = sample[node.parent.feature]
+    sample[node.feature] = weighted_rand(probs_list[node.feature][parent_sample])
+    node.children.each do |child|
+      gen_sample_rec(sample, child, probs_list)
+    end
+  end
+
+  def weighted_rand(prob)
+    Random.rand(100) <= prob * 100 ? 0 : 1
   end
 
   def gen_dep_list
@@ -39,10 +89,12 @@ class AI::Command::Ml < AI::Command::Base
 
   class DependenceTree
 
-    attr_accessor :list
+    attr_accessor :list, :root
 
     def initialize(list = nil)
       @list = list
+      @root = list.find {|n| n.parent.nil?}
+      populate_children
     end
 
     def feature_node(feature)
@@ -53,15 +105,21 @@ class AI::Command::Ml < AI::Command::Base
       list[feature].parent
     end
 
-    def root_feature
-      list[0]
+    def populate_children
+      list.each do |node|
+        list.each do |child|
+          if child.parent && child.parent.feature == node.feature
+            node.add_child(child)
+          end
+        end
+      end
     end
 
     def output_graph
       g = GraphViz.new( :G, :type => :digraph )
       glist = []
 
-      # Create two nodes
+      # Create nodes
       list.each do |node|
         glist << g.add_nodes(node.feature.to_s)
       end
@@ -80,11 +138,19 @@ class AI::Command::Ml < AI::Command::Base
 
   class Node
 
-    attr_accessor :feature, :parent
+    attr_accessor :feature, :parent, :children
 
     def initialize(feature, parent)
       @feature = feature
       @parent = parent
+      @children = []
+    end
+
+    def add_child(node)
+      added = @children.map { |n| n.feature }
+      if !added.include?(node.feature)
+        @children << node
+      end
     end
   end
 
