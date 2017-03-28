@@ -3,6 +3,7 @@ require 'graphviz'
 
 class AI::Command::Ml < AI::Command::Base
   VALID_METHODS = ['help']
+  FEATURE_LIST = 0..9
 
   def index
     if @opts.help?
@@ -10,7 +11,7 @@ class AI::Command::Ml < AI::Command::Base
     else
       @num_features = 10
       @num_classes = 4
-      @num_samples = 200
+      @num_samples = 2000
 
       puts "ML"
 
@@ -25,10 +26,60 @@ class AI::Command::Ml < AI::Command::Base
     @num_classes.times.with_index do |i|
       probs_list = gen_dependence_probabilities(dep_tree)
       samples = gen_samples(i, @num_samples, probs_list, dep_tree)
-      classes << {probabilities: probs_list, samples: samples}
+      classes << {probs: probs_list, samples: samples, est_probs: est_feature_probabilities(samples), est_cond_probs: est_cond_probabilities(samples)}
     end
+
+    probs_matrix = est_cond_probabilities(classes[0][:samples])
     byebug
     # dep_tree.output_graph
+  end
+
+  # determine probability of each feature occuring (est_feature_probabilities)
+  # determine probability of each feature given another feature (est_cond_probabilities)
+  #   if different then we know that feature is dependent on that feature
+  #   e.g. P(1) = 0.6 P(1|2) = 0.2   1 is dependent on 2
+  #   the bigger the difference in probabilities the more dependent
+  def est_dep_list(feature_probs, cond_probs)
+    feature_probs.each_with_index do |feature_prob, feature|
+      cond_probs[feature].each do |key, value|
+        
+      end
+    end
+  end
+
+  # determines the probability of each feature occuring given another feature
+  # [prob if occured, prob if not occured]
+  def est_cond_probabilities(samples)
+    probs_matrix = []
+    total_count = samples.count
+    # count the number of times feature2 is 0 given a value for feature1
+    (0..9).each do |feature1|
+      feature_probs_matrix = {}
+      (0..9).each do |feature2|
+        next if feature1 == feature2
+        count_0 = samples.count {|e| e[feature2] == 0}
+        count_1 = samples.count {|e| e[feature2] == 1}
+        count_when_0 = samples.count {|e| e[feature2] == 0 && e[feature1] == 0}
+        count_when_1 = samples.count {|e| e[feature2] == 1 && e[feature1] == 0}
+        prob_f2_f1_0 = count_when_0 / count_0.to_f rescue 0
+        prob_f2_f1_1 = count_when_1 / count_1.to_f rescue 0
+        feature_probs_matrix[:"f#{feature2}"] = [prob_f2_f1_0.round(2), prob_f2_f1_1.round(2)]
+      end
+      probs_matrix << feature_probs_matrix
+    end
+    probs_matrix
+  end
+
+  # determines the probability of each feature occuring
+  def est_feature_probabilities(samples)
+    probs_matrix = []
+    total_count = samples.count.to_f
+
+    FEATURE_LIST.each do |feature|
+      feature_count = samples.count {|e| e[feature] == 0}
+      probs_matrix << (feature_count / total_count).round(2)
+    end
+    probs_matrix
   end
 
   def gen_dependence_probabilities(dependence_tree)
