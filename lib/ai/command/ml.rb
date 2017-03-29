@@ -28,10 +28,17 @@ class AI::Command::Ml < AI::Command::Base
       samples = gen_samples(i, @num_samples, probs_list, dep_tree)
       est_probs = est_feature_probabilities(samples)
       est_cond_probs = est_cond_probabilities(samples)
+      cond_diffs = ind_cond_diff_matrix(est_probs, est_cond_probs)
+      dep_stats = dep_stats(cond_diffs)
+      ord_cond_diffs = ordered_cond_diffs(cond_diffs)
+      est_dep_tree = est_dep_tree(ord_cond_diffs)
       classes << {probs: probs_list, samples: samples,
         est_probs: est_probs,
         est_cond_probs: est_cond_probs,
-        cond_diffs: ind_cond_diff_matrix(est_probs, est_cond_probs)
+        cond_diffs: cond_diffs,
+        ord_cond_diffs: ord_cond_diffs,
+        est_dep_tree: est_dep_tree,
+        dep_stats: dep_stats
       }
     end
     puts "probs"
@@ -42,8 +49,11 @@ class AI::Command::Ml < AI::Command::Base
     puts classes[0][:est_cond_probs][1]
     puts "cond_diffs"
     puts classes[0][:cond_diffs][1]
+    # puts "dep_stats"
+    # puts classes[0][:dep_stats][:"1"]
+    # puts "ord_cond_diffs"
+    # puts classes[0][:ord_cond_diffs]
 
-    est_dep_list = est_dep_list(classes[0][:cond_diffs])
     byebug
     # dep_tree.output_graph
   end
@@ -53,9 +63,79 @@ class AI::Command::Ml < AI::Command::Base
   #   if different then we know that feature is dependent on that feature
   #   e.g. P(1) = 0.6 P(1|2) = 0.2   1 is dependent on 2
   #   the bigger the difference in probabilities the more dependent
+  def est_dep_tree(ord_cond_diffs)
+    deps_list = []
+    connected_node_lists = []
+    deps_edge_list = []
 
+    ord_cond_diffs.each do |diff|
+      if deps_edge_list.include?(diff[:pair].reverse) || deps_edge_list.include?(diff[:pair])
+        next
+      elsif (connected_node_lists.select {|x| (x & diff[:pair]).size == 2}).any?
+        next
+      else
+        deps_edge_list << diff[:pair]
+        if deps_edge_list.size > 9
+          byebug
+        end
+        join_lists = []
+        connected_node_lists.each_with_index do |node_list, index|
+          if (node_list & diff[:pair]).size > 0
+            join_lists << index
+          end
+        end
+        if join_lists.size == 2
+          connected_node_lists[join_lists[0]] = connected_node_lists[join_lists[0]] | connected_node_lists[join_lists[1]]
+          connected_node_lists.delete_at(join_lists[1])
+        elsif join_lists.size == 1
+          connected_node_lists[join_lists[0]] = connected_node_lists[join_lists[0]] | diff[:pair]
+        elsif join_lists.size == 0
+          connected_node_lists << diff[:pair]
+        else
+          puts "This should not happen"
+          byebug
+        end
+      end
+    end
 
-  def est_dep_list(diff_matrix)
+    # initialize nodes
+    FEATURE_LIST.each do |feature|
+      deps_list << Node.new(feature, nil)
+    end
+
+    # set parents
+    connect_tree_rec(deps_list[0], deps_edge_list, deps_list)
+
+    DependenceTree.new(deps_list)
+  end
+
+  def connect_tree_rec(node, deps_edge_list, deps_list)
+    edges = deps_edge_list.select {|e| e.include?(node.feature)}
+    if node.parent
+      edges = edges.reject {|e| e.include?(node.parent.feature)}
+    end
+    return if edges.empty?
+    children = edges.flatten.uniq
+    children.each do |child|
+      next if node.feature == child
+      deps_list[child].parent = deps_list[node.feature]
+      connect_tree_rec(deps_list[child], deps_edge_list, deps_list)
+    end
+  end
+
+  # flatten the diff matrix to one ordered list
+  def ordered_cond_diffs(diff_matrix)
+    ordered_diffs = []
+    diff_matrix.each_with_index do |feature_diffs, feature1|
+      feature_diffs.each do |feature2, diff|
+        ordered_diffs << {pair: [feature1, feature2.to_s.to_i], weight: diff}
+      end
+    end
+    ordered_diffs.sort {|a,b| a[:weight] < b[:weight] ? 1 : -1}
+  end
+
+  # stats on the diffs
+  def dep_stats(diff_matrix)
     est_dep_feature = {}
     diff_matrix.each_with_index do |feature_diffs, feature1|
       max = 0
@@ -66,8 +146,8 @@ class AI::Command::Ml < AI::Command::Base
           max_feature = feature2
         end
       end
-      # TODO zip then sort
-      # feature1 
+      # ordered by weight
+      ordered = feature_diffs.keys.zip(feature_diffs.values).sort {|a,b| a[1] < b[1] ? 1 : -1}
 
       # Descriptive stats
       arr_diffs = feature_diffs.values.map {|v| v * 100}
@@ -75,8 +155,8 @@ class AI::Command::Ml < AI::Command::Base
       mean = total.to_f / arr_diffs.length
       variance = arr_diffs.inject(0){|accum, i| accum + (i - mean) ** 2}
       std_dev = Math.sqrt(variance)
-      # TODO add a weight to dependence of the feature
-      est_dep_feature[:"#{feature1}"] = {max_feature: max_feature,  mean: mean, std_dev: std_dev}
+
+      est_dep_feature[:"#{feature1}"] = {max_feature: max_feature, ordered: ordered, mean: mean, std_dev: std_dev}
     end
     est_dep_feature
   end
@@ -181,14 +261,14 @@ class AI::Command::Ml < AI::Command::Base
     list = []
     list << Node.new(0, nil)
     list << Node.new(1, list[0])
-    list << Node.new(2, list[0])
-    list << Node.new(3, list[0])
-    list << Node.new(4, list[0])
-    list << Node.new(5, list[0])
-    list << Node.new(6, list[0])
-    list << Node.new(7, list[0])
-    list << Node.new(8, list[0])
-    list << Node.new(9, list[0])
+    list << Node.new(2, list[1])
+    list << Node.new(3, list[1])
+    list << Node.new(4, list[2])
+    list << Node.new(5, list[1])
+    list << Node.new(6, list[3])
+    list << Node.new(7, list[2])
+    list << Node.new(8, list[4])
+    list << Node.new(9, list[5])
     list
   end
 
