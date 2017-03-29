@@ -11,7 +11,7 @@ class AI::Command::Ml < AI::Command::Base
     else
       @num_features = 10
       @num_classes = 4
-      @num_samples = 2000
+      @num_samples = 4000
 
       puts "ML"
 
@@ -26,10 +26,24 @@ class AI::Command::Ml < AI::Command::Base
     @num_classes.times.with_index do |i|
       probs_list = gen_dependence_probabilities(dep_tree)
       samples = gen_samples(i, @num_samples, probs_list, dep_tree)
-      classes << {probs: probs_list, samples: samples, est_probs: est_feature_probabilities(samples), est_cond_probs: est_cond_probabilities(samples)}
+      est_probs = est_feature_probabilities(samples)
+      est_cond_probs = est_cond_probabilities(samples)
+      classes << {probs: probs_list, samples: samples,
+        est_probs: est_probs,
+        est_cond_probs: est_cond_probs,
+        cond_diffs: ind_cond_diff_matrix(est_probs, est_cond_probs)
+      }
     end
+    puts "probs"
+    puts classes[0][:probs].to_s
+    puts "est_probs"
+    puts classes[0][:est_probs].to_s
+    puts "est_cond_probs"
+    puts classes[0][:est_cond_probs][1]
+    puts "cond_diffs"
+    puts classes[0][:cond_diffs][1]
 
-    probs_matrix = est_cond_probabilities(classes[0][:samples])
+    est_dep_list = est_dep_list(classes[0][:cond_diffs])
     byebug
     # dep_tree.output_graph
   end
@@ -39,12 +53,47 @@ class AI::Command::Ml < AI::Command::Base
   #   if different then we know that feature is dependent on that feature
   #   e.g. P(1) = 0.6 P(1|2) = 0.2   1 is dependent on 2
   #   the bigger the difference in probabilities the more dependent
-  def est_dep_list(feature_probs, cond_probs)
-    feature_probs.each_with_index do |feature_prob, feature|
-      cond_probs[feature].each do |key, value|
-        
+
+
+  def est_dep_list(diff_matrix)
+    est_dep_feature = {}
+    diff_matrix.each_with_index do |feature_diffs, feature1|
+      max = 0
+      max_feature = -1
+      feature_diffs.each do |feature2, diff|
+        if diff > max
+          max = diff
+          max_feature = feature2
+        end
       end
+      # TODO zip then sort
+      # feature1 
+
+      # Descriptive stats
+      arr_diffs = feature_diffs.values.map {|v| v * 100}
+      total = arr_diffs.inject(:+)
+      mean = total.to_f / arr_diffs.length
+      variance = arr_diffs.inject(0){|accum, i| accum + (i - mean) ** 2}
+      std_dev = Math.sqrt(variance)
+      # TODO add a weight to dependence of the feature
+      est_dep_feature[:"#{feature1}"] = {max_feature: max_feature,  mean: mean, std_dev: std_dev}
     end
+    est_dep_feature
+  end
+
+  # determine the difference between the independent probabilities and the conditional probabilities
+  def ind_cond_diff_matrix(feature_probs, cond_probs)
+    diff_matrix = []
+    feature_probs.each_with_index do |feature_prob, feature|
+      feature_diff_matrix = {}
+      cond_probs[feature].each do |feature2, cond_probs|
+        diff0 = (feature_prob - cond_probs[0]).abs
+        diff1 = (feature_prob - cond_probs[1]).abs
+        feature_diff_matrix[:"#{feature2}"] = (diff0 + diff1).round(2)
+      end
+      diff_matrix << feature_diff_matrix
+    end
+    diff_matrix
   end
 
   # determines the probability of each feature occuring given another feature
@@ -63,7 +112,7 @@ class AI::Command::Ml < AI::Command::Base
         count_when_1 = samples.count {|e| e[feature2] == 1 && e[feature1] == 0}
         prob_f2_f1_0 = count_when_0 / count_0.to_f rescue 0
         prob_f2_f1_1 = count_when_1 / count_1.to_f rescue 0
-        feature_probs_matrix[:"f#{feature2}"] = [prob_f2_f1_0.round(2), prob_f2_f1_1.round(2)]
+        feature_probs_matrix[:"#{feature2}"] = [prob_f2_f1_0.round(2), prob_f2_f1_1.round(2)]
       end
       probs_matrix << feature_probs_matrix
     end
@@ -87,7 +136,12 @@ class AI::Command::Ml < AI::Command::Base
     probs_list = []
     probs_list << Random.rand.round(2)
     (tree.list.count - 1).times do
-      probs_list << [Random.rand.round(2), Random.rand.round(2)]
+      first_rand = Random.rand(0.1..0.9)
+      while true
+        second_rand = Random.rand(0.1..0.9)
+        break if (first_rand - second_rand).abs > 0.1
+      end
+      probs_list << [first_rand.round(2), second_rand.round(2)]
     end
     probs_list
   end
@@ -128,13 +182,13 @@ class AI::Command::Ml < AI::Command::Base
     list << Node.new(0, nil)
     list << Node.new(1, list[0])
     list << Node.new(2, list[0])
-    list << Node.new(3, list[1])
-    list << Node.new(4, list[1])
-    list << Node.new(5, list[2])
-    list << Node.new(6, list[3])
-    list << Node.new(7, list[4])
-    list << Node.new(8, list[2])
-    list << Node.new(9, list[3])
+    list << Node.new(3, list[0])
+    list << Node.new(4, list[0])
+    list << Node.new(5, list[0])
+    list << Node.new(6, list[0])
+    list << Node.new(7, list[0])
+    list << Node.new(8, list[0])
+    list << Node.new(9, list[0])
     list
   end
 
