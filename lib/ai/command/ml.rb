@@ -15,54 +15,65 @@ class AI::Command::Ml < AI::Command::Base
 
       puts "ML"
 
-      data_generation
+      artificial_data
     end
   end
 
-  def data_generation
+  def artificial_data
     classes = []
     dep_tree = DependenceTree.new(gen_dep_list)
 
     @num_classes.times.with_index do |i|
       probs_list = gen_dependence_probabilities(dep_tree)
       samples = gen_samples(i, @num_samples, probs_list, dep_tree)
-      est_probs = est_feature_probabilities(samples)
-      est_cond_probs = est_cond_probabilities(samples)
-      cond_diffs = ind_cond_diff_matrix(est_probs, est_cond_probs)
+      est_ind_probs = est_feature_probabilities(samples)
+      est_cond_probs = est_cond_probs_matrix(samples)
+      cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
       dep_stats = dep_stats(cond_diffs)
       ord_cond_diffs = ordered_cond_diffs(cond_diffs)
       est_dep_tree = est_dep_tree(ord_cond_diffs)
+      est_dep_probs = est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
       classes << {probs: probs_list, samples: samples,
-        est_probs: est_probs,
+        est_ind_probs: est_ind_probs,
         est_cond_probs: est_cond_probs,
         cond_diffs: cond_diffs,
         ord_cond_diffs: ord_cond_diffs,
         est_dep_tree: est_dep_tree,
+        est_dep_probs: est_dep_probs,
         dep_stats: dep_stats
       }
     end
     puts "probs"
     puts classes[0][:probs].to_s
-    puts "est_probs"
-    puts classes[0][:est_probs].to_s
+    puts "est_ind_probs"
+    puts classes[0][:est_ind_probs].to_s
+    puts "est_dep_probs"
+    puts classes[0][:est_dep_probs].to_s
     puts "est_cond_probs"
     puts classes[0][:est_cond_probs][1]
     puts "cond_diffs"
     puts classes[0][:cond_diffs][1]
-    # puts "dep_stats"
-    # puts classes[0][:dep_stats][:"1"]
-    # puts "ord_cond_diffs"
-    # puts classes[0][:ord_cond_diffs]
+
+
 
     byebug
     # dep_tree.output_graph
   end
 
-  # determine probability of each feature occuring (est_feature_probabilities)
-  # determine probability of each feature given another feature (est_cond_probabilities)
-  #   if different then we know that feature is dependent on that feature
-  #   e.g. P(1) = 0.6 P(1|2) = 0.2   1 is dependent on 2
-  #   the bigger the difference in probabilities the more dependent
+  def est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
+    dep_probs = []
+    est_dep_tree.list.each do |node|
+      dep_prob = if node.parent
+        est_cond_probs[node.feature][:"#{node.parent.feature}"]
+      else
+        est_ind_probs[node.feature]
+      end
+      dep_probs.insert(node.feature, dep_prob)
+    end
+    dep_probs
+  end
+
+  # build tree from order of weighted edge diffs
   def est_dep_tree(ord_cond_diffs)
     deps_list = []
     connected_node_lists = []
@@ -106,7 +117,7 @@ class AI::Command::Ml < AI::Command::Base
     # set parents
     connect_tree_rec(deps_list[0], deps_edge_list, deps_list)
 
-    DependenceTree.new(deps_list)
+    DependenceTree.new(deps_list).populate_children
   end
 
   def connect_tree_rec(node, deps_edge_list, deps_list)
@@ -178,7 +189,7 @@ class AI::Command::Ml < AI::Command::Base
 
   # determines the probability of each feature occuring given another feature
   # [prob if occured, prob if not occured]
-  def est_cond_probabilities(samples)
+  def est_cond_probs_matrix(samples)
     probs_matrix = []
     total_count = samples.count
     # count the number of times feature2 is 0 given a value for feature1
@@ -298,6 +309,7 @@ class AI::Command::Ml < AI::Command::Base
           end
         end
       end
+      self
     end
 
     def output_graph
