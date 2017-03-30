@@ -11,7 +11,8 @@ class AI::Command::Ml < AI::Command::Base
     else
       @num_features = 10
       @num_classes = 4
-      @num_samples = 4000
+      @num_samples = 2000
+      @k_fold = 5
 
       puts "ML"
 
@@ -29,7 +30,6 @@ class AI::Command::Ml < AI::Command::Base
       est_ind_probs = est_feature_probabilities(samples)
       est_cond_probs = est_cond_probs_matrix(samples)
       cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
-      dep_stats = dep_stats(cond_diffs)
       ord_cond_diffs = ordered_cond_diffs(cond_diffs)
       est_dep_tree = est_dep_tree(ord_cond_diffs)
       est_dep_probs = est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
@@ -39,8 +39,7 @@ class AI::Command::Ml < AI::Command::Base
         cond_diffs: cond_diffs,
         ord_cond_diffs: ord_cond_diffs,
         est_dep_tree: est_dep_tree,
-        est_dep_probs: est_dep_probs,
-        dep_stats: dep_stats
+        est_dep_probs: est_dep_probs
       }
     end
     puts "probs"
@@ -54,12 +53,131 @@ class AI::Command::Ml < AI::Command::Base
     puts "cond_diffs"
     puts classes[0][:cond_diffs][1]
 
-
+    sample_set = []
+    classes.each do |clas|
+      sample_set += clas[:samples]
+    end
+    conf_matrix_ind_bayes = ind_bayes_classification(sample_set)
+    conf_matrix_dep_bayes = dep_bayes_classification(classes[0][:est_dep_tree], sample_set)
 
     byebug
     # dep_tree.output_graph
   end
 
+  def dep_bayes_classification(dep_tree, sample_set)
+    all_samples = sample_set.shuffle
+    matrix = initialize_conf_matrix
+    classes = Array.new(@num_classes) {|i| Hash.new}
+    test_size = all_samples.count / @k_fold
+
+    i = 0
+    @k_fold.times do
+      test_samples = all_samples[(test_size*i)...(test_size*(i+1))]
+      train_samples = all_samples[0...(test_size*i)]
+      train_samples += all_samples[(test_size*(i+1))...all_samples.count]
+
+      classes.each_with_index do |classs, index|
+        class_samples = train_samples.select {|s| s.last == index}
+        classs[:probs] = est_dep_probs(dep_tree,
+          est_cond_probs_matrix(class_samples),
+          est_feature_probabilities(class_samples))
+      end
+
+      test_samples.each do |test_sample|
+        predicted = classify_sample_dep(classes, test_sample, dep_tree)
+        actual = test_sample.last
+        matrix[:"#{actual}_#{predicted}"] += 1
+      end
+      i += 1
+    end
+    matrix
+  end
+
+  def classify_sample_dep(classes, test_sample, dep_tree)
+    llhs = []
+    classes.each do |classs|
+      node = dep_tree.root
+      llh = classs[:probs][node.feature]
+      node.children.each do |child|
+        llh = llh * classify_sample_dep_rec(test_sample, child, classs[:probs])
+      end
+      llhs << llh
+    end
+    llhs.index(llhs.max)
+  rescue
+    byebug
+  end
+
+  def classify_sample_dep_rec(sample, node, probs_list)
+    parent_feature = sample[node.parent.feature]
+    llh = 1
+    node.children.each do |child|
+      llh = llh * classify_sample_dep_rec(sample, child, probs_list)
+    end
+    prob = probs_list[node.feature][parent_feature]
+    chance = sample[node.feature] == 0 ? prob : 1 - prob
+    return llh * chance
+  end
+
+  # perform naive bayes classification
+  def ind_bayes_classification(sample_set)
+    all_samples = sample_set.shuffle
+    matrix = initialize_conf_matrix
+    classes = Array.new(@num_classes) {|i| Hash.new}
+    test_size = all_samples.count / @k_fold
+
+    i = 0
+    @k_fold.times do
+      test_samples = all_samples[(test_size*i)...(test_size*(i+1))]
+      train_samples = all_samples[0...(test_size*i)]
+      train_samples += all_samples[(test_size*(i+1))...all_samples.count]
+
+      classes.each_with_index do |classs, index|
+        class_samples = train_samples.select {|s| s.last == index}
+        classs[:probs] = est_feature_probabilities(class_samples)
+      end
+
+      test_samples.each do |test_sample|
+        predicted = classify_sample_ind(classes, test_sample)
+        actual = test_sample.last
+        matrix[:"#{actual}_#{predicted}"] += 1
+      end
+      i += 1
+    end
+    matrix
+  end
+
+  # classify sample by treating features independently
+  def classify_sample_ind(classes, sample)
+    llh = []
+    classes.each do |classs|
+      likelihood = 1
+      classs[:probs].zip(sample).each do |prob, feature|
+        chance = feature == 0 ? prob : 1 - prob
+        likelihood = likelihood * chance
+      end
+      llh << likelihood
+    end
+    llh.index(llh.max)
+  rescue
+    byebug
+  end
+
+  def initialize_conf_matrix
+    matrix = {}
+    i = 0
+    @num_classes.times do
+      j = 0
+      @num_classes.times do
+        matrix[:"#{i}_#{j}"] = 0
+        j += 1
+      end
+      i += 1
+    end
+    matrix
+  end
+
+  # Estimate the dependent probabilities based on the estimated tree
   def est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
     dep_probs = []
     est_dep_tree.list.each do |node|
