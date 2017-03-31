@@ -1,15 +1,18 @@
 require 'ai/command/base'
 require 'graphviz'
+require 'csv'
 require 'byebug'
 
 class AI::Command::Ml < AI::Command::Base
   VALID_METHODS = ['help']
   FEATURE_LIST = 0..9
+  THRESHOLDS = [13.5,1.6,2.2,22,90,2.8,2,0.38,1.7,5.4,0.8,2,1000]
 
   def index
     if @opts.help?
       $stdout.puts slop_opts
     else
+      @feature_list = FEATURE_LIST
       @num_features = 10
       @num_classes = 4
       @num_samples = 2000
@@ -17,7 +20,8 @@ class AI::Command::Ml < AI::Command::Base
 
       puts "ML"
 
-      artificial_data
+      # artificial_data
+      real_data
     end
   end
 
@@ -25,14 +29,14 @@ class AI::Command::Ml < AI::Command::Base
     classes = []
     dep_tree = DependenceTree.new(gen_dep_list)
 
-    @num_classes.times.with_index do |i|
+    @num_classes.times do |i|
       probs_list = gen_dependence_probabilities(dep_tree)
       samples = gen_samples(i, @num_samples, probs_list, dep_tree)
       est_ind_probs = est_feature_probabilities(samples)
       est_cond_probs = est_cond_probs_matrix(samples)
       cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
       ord_cond_diffs = ordered_cond_diffs(cond_diffs)
-      est_dep_tree = est_dep_tree(ord_cond_diffs)
+      est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
       est_dep_probs = est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
       classes << {probs: probs_list, samples: samples,
         est_ind_probs: est_ind_probs,
@@ -49,10 +53,6 @@ class AI::Command::Ml < AI::Command::Base
     puts classes[0][:est_ind_probs].to_s
     puts "est_dep_probs"
     puts classes[0][:est_dep_probs].to_s
-    puts "est_cond_probs"
-    puts classes[0][:est_cond_probs][1]
-    puts "cond_diffs"
-    puts classes[0][:cond_diffs][1]
 
     sample_set = []
     classes.each do |classs|
@@ -67,6 +67,61 @@ class AI::Command::Ml < AI::Command::Base
 
     byebug
     # dep_tree.output_graph
+  end
+
+  def real_data
+    classes = []
+    sample_set = CSV.read('./Datasets/wine.csv')
+    sample_set = organize_data(sample_set)
+    @num_features = sample_set.first.size - 1
+    @num_samples = sample_set.size
+    @num_classes = num_of_classes(sample_set)
+    @feature_list = 0...@num_features
+
+    est_ind_probs = est_feature_probabilities(sample_set)
+    est_cond_probs = est_cond_probs_matrix(sample_set)
+    cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
+    ord_cond_diffs = ordered_cond_diffs(cond_diffs)
+    est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
+
+    @num_classes.times do |klass|
+      samples = sample_set.select {|s| s.last == klass}
+      est_ind_probs = est_feature_probabilities(samples)
+      est_cond_probs = est_cond_probs_matrix(samples)
+      cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
+      ord_cond_diffs = ordered_cond_diffs(cond_diffs)
+      # est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
+      est_dep_probs = est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
+      classes << {samples: samples,
+        est_ind_probs: est_ind_probs,
+        est_cond_probs: est_cond_probs,
+        cond_diffs: cond_diffs,
+        ord_cond_diffs: ord_cond_diffs,
+        est_dep_probs: est_dep_probs
+      }
+    end
+
+    byebug
+    # dep_tree.output_graph
+  end
+
+  def organize_data(samples)
+    samples = samples.map do |sample|
+      klass = sample.take(1)[0].to_i - 1
+      sample[1...sample.size] + [klass]
+    end
+
+    samples = samples.map do |sample|
+      sample.map.with_index do |feature,index|
+        if index == sample.size - 1
+          feature
+        else
+          feature.to_f > THRESHOLDS[index] ? 0 : 1
+        end
+      end
+    end
+
+    samples
   end
 
   def dec_tree_classification(dec_tree, sample_set)
@@ -101,7 +156,7 @@ class AI::Command::Ml < AI::Command::Base
 
   def gen_dec_tree(sample_set, classes)
     current_samples = sample_set.shuffle
-    remaining_features = FEATURE_LIST.to_a
+    remaining_features = @feature_list.to_a
     klasses = classes.map {|c| {probs: c[:est_ind_probs]}}
     dec_tree_list = []
     gen_dec_tree_list_rec(nil, nil, current_samples, remaining_features, dec_tree_list, klasses)
@@ -266,7 +321,7 @@ class AI::Command::Ml < AI::Command::Base
   end
 
   # build tree from order of weighted edge diffs
-  def est_dep_tree(ord_cond_diffs)
+  def est_dep_tree(ord_cond_diffs, opts={})
     deps_list = []
     connected_node_lists = []
     deps_edge_list = []
@@ -299,12 +354,17 @@ class AI::Command::Ml < AI::Command::Base
     end
 
     # initialize nodes
-    FEATURE_LIST.each do |feature|
+    @feature_list.each do |feature|
       deps_list << Node.new(feature, nil)
     end
 
     # set parents
-    connect_tree_rec(deps_list[0], deps_edge_list, deps_list)
+    root = if opts[:diff_matrix]
+      est_dep_root(opts[:diff_matrix])
+    else
+      0
+    end
+    connect_tree_rec(deps_list[root], deps_edge_list, deps_list)
 
     DependenceTree.new(deps_list)
   end
@@ -335,7 +395,7 @@ class AI::Command::Ml < AI::Command::Base
   end
 
   # stats on the diffs
-  def dep_stats(diff_matrix)
+  def est_dep_root(diff_matrix)
     est_dep_feature = {}
     diff_matrix.each_with_index do |feature_diffs, feature1|
       max = 0
@@ -358,7 +418,18 @@ class AI::Command::Ml < AI::Command::Base
 
       est_dep_feature[:"#{feature1}"] = {max_feature: max_feature, ordered: ordered, mean: mean, std_dev: std_dev}
     end
-    est_dep_feature
+
+    # max std_dev
+    max_dev = 0
+    max_feature = -1
+    est_dep_feature.each do |feature, value|
+      if value[:std_dev] > max_dev
+        max_dev = value[:std_dev]
+        max_feature = feature
+      end
+    end
+
+    max_feature.to_s.to_i
   end
 
   # determine the difference between the independent probabilities and the conditional probabilities
@@ -382,9 +453,9 @@ class AI::Command::Ml < AI::Command::Base
     probs_matrix = []
     total_count = samples.count
     # count the number of times feature2 is 0 given a value for feature1
-    (0..9).each do |feature1|
+    @feature_list.each do |feature1|
       feature_probs_matrix = {}
-      (0..9).each do |feature2|
+      @feature_list.each do |feature2|
         next if feature1 == feature2
         count_0 = samples.count {|e| e[feature2] == 0}
         count_1 = samples.count {|e| e[feature2] == 1}
@@ -404,7 +475,7 @@ class AI::Command::Ml < AI::Command::Base
     probs_matrix = []
     total_count = samples.count.to_f
 
-    FEATURE_LIST.each do |feature|
+    @feature_list.each do |feature|
       feature_count = samples.count {|e| e[feature] == 0}
       probs_matrix << (feature_count / total_count).round(2)
     end
@@ -480,6 +551,11 @@ class AI::Command::Ml < AI::Command::Base
       counts << samples.count {|s| s.last == i}
     end
     counts
+  end
+
+  def num_of_classes(samples)
+    classes = samples.map { |e| e.last  }
+    classes.uniq.size
   end
 
   def initialize_conf_matrix
