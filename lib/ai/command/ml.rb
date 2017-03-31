@@ -59,37 +59,79 @@ class AI::Command::Ml < AI::Command::Base
       sample_set += classs[:samples]
     end
 
-    dec_tree = gen_dec_tree(sample_set)
-    # dec_tree.output_graph
-    byebug
-
     conf_matrix_ind_bayes = ind_bayes_classification(sample_set)
     conf_matrix_dep_bayes = dep_bayes_classification(classes[0][:est_dep_tree], sample_set)
 
+    dec_tree = gen_dec_tree(sample_set, classes)
+    conf_matrix_dec_tree = dec_tree_classification(dec_tree, sample_set)
+
+    byebug
     # dep_tree.output_graph
   end
 
-  def gen_dec_tree(sample_set)
+  def dec_tree_classification(dec_tree, sample_set)
+    all_samples = sample_set.shuffle
+    matrix = initialize_conf_matrix
+    classes = Array.new(@num_classes) {|i| Hash.new}
+    test_size = all_samples.count / @k_fold
+
+    i = 0
+    @k_fold.times do
+      test_samples = all_samples[(test_size*i)...(test_size*(i+1))]
+      train_samples = all_samples[0...(test_size*i)]
+      train_samples += all_samples[(test_size*(i+1))...all_samples.count]
+
+      test_samples.each do |test_sample|
+        predicted = classify_sample_dec_tree(test_sample, dec_tree)
+        actual = test_sample.last
+        matrix[:"#{actual}_#{predicted}"] += 1
+      end
+      i += 1
+    end
+    matrix
+  end
+
+  def classify_sample_dec_tree(test_sample, dec_tree)
+    node = dec_tree.root
+    while node.children.any?
+      node = node.children[test_sample[node.feature]]
+    end
+    node.class
+  end
+
+  def gen_dec_tree(sample_set, classes)
     current_samples = sample_set.shuffle
     remaining_features = FEATURE_LIST.to_a
+    klasses = classes.map {|c| {probs: c[:est_ind_probs]}}
     dec_tree_list = []
-    gen_dec_tree_list_rec(nil, nil, current_samples, remaining_features, dec_tree_list)
+    gen_dec_tree_list_rec(nil, nil, current_samples, remaining_features, dec_tree_list, klasses)
 
     DecisionTree.new(dec_tree_list)
   end
 
-  def gen_dec_tree_list_rec(parent, outcome, samples, remaining, dec_tree_list)
+  def gen_dec_tree_list_rec(parent, outcome, samples, remaining, dec_tree_list, klasses)
     return if samples.empty?
+    class_counts = class_counts(samples)
+    if class_counts.max == samples.count || remaining.empty?
+      klass = if class_counts.max == samples.count
+        samples[0].last
+      elsif class_counts.count(class_counts.max) == 1
+        class_counts.index(class_counts.max)
+      else
+        classify_sample_ind(klasses, samples[0])
+      end
+      node = Node.new(nil, parent, {outcome: outcome, class: klass})
+      dec_tree_list << node
+      return
+    end
     best = best_info_gain_attr(remaining, samples)
-    node = Node.new(best, parent, outcome)
+    node = Node.new(best, parent, {outcome: outcome})
     dec_tree_list << node
     pos_samples = samples.select {|s| s[best] == 0}
     neg_samples = samples.select {|s| s[best] == 1}
     remaining = remaining - [best]
-    if remaining.any?
-      gen_dec_tree_list_rec(node, 0, pos_samples, remaining, dec_tree_list)
-      gen_dec_tree_list_rec(node, 1, neg_samples, remaining, dec_tree_list)
-    end
+    gen_dec_tree_list_rec(node, 0, pos_samples, remaining, dec_tree_list, klasses)
+    gen_dec_tree_list_rec(node, 1, neg_samples, remaining, dec_tree_list, klasses)
   end
 
   def best_info_gain_attr(feature_list, samples)
@@ -416,10 +458,7 @@ class AI::Command::Ml < AI::Command::Base
   end
 
   def entropy_for_samples(samples)
-    class_counts = []
-    @num_classes.times do |i|
-      class_counts << samples.count {|s| s.last == i}
-    end
+    class_counts = class_counts(samples)
     entropy(class_counts)
   end
 
@@ -433,6 +472,14 @@ class AI::Command::Ml < AI::Command::Base
       entropy += -class_fraction * Math.log(class_fraction, base)
     end
     entropy
+  end
+
+  def class_counts(samples)
+    counts = []
+    @num_classes.times do |i|
+      counts << samples.count {|s| s.last == i}
+    end
+    counts
   end
 
   def initialize_conf_matrix
@@ -520,7 +567,7 @@ class AI::Command::Ml < AI::Command::Base
       list.each do |node|
         children = []
         list.each do |child|
-          if child.parent && child.parent.feature == node.feature
+          if child.parent && child.parent == node
             children.insert(child.outcome, child)
           end
         end
@@ -552,12 +599,13 @@ class AI::Command::Ml < AI::Command::Base
 
   class Node
 
-    attr_accessor :feature, :parent, :children, :outcome
+    attr_accessor :feature, :parent, :children, :outcome, :class
 
-    def initialize(feature, parent, outcome=nil)
+    def initialize(feature, parent, opts={})
       @feature = feature
       @parent = parent
-      @outcome = outcome
+      @outcome = opts[:outcome]
+      @class = opts[:class]
       @children = []
     end
 
