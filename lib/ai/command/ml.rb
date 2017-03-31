@@ -1,5 +1,6 @@
 require 'ai/command/base'
 require 'graphviz'
+require 'byebug'
 
 class AI::Command::Ml < AI::Command::Base
   VALID_METHODS = ['help']
@@ -54,14 +55,59 @@ class AI::Command::Ml < AI::Command::Base
     puts classes[0][:cond_diffs][1]
 
     sample_set = []
-    classes.each do |clas|
-      sample_set += clas[:samples]
+    classes.each do |classs|
+      sample_set += classs[:samples]
     end
+
+    dec_tree = gen_dec_tree(sample_set)
+    # dec_tree.output_graph
+    byebug
+
     conf_matrix_ind_bayes = ind_bayes_classification(sample_set)
     conf_matrix_dep_bayes = dep_bayes_classification(classes[0][:est_dep_tree], sample_set)
 
-    byebug
     # dep_tree.output_graph
+  end
+
+  def gen_dec_tree(sample_set)
+    current_samples = sample_set.shuffle
+    remaining_features = FEATURE_LIST.to_a
+    dec_tree_list = []
+    gen_dec_tree_list_rec(nil, nil, current_samples, remaining_features, dec_tree_list)
+
+    DecisionTree.new(dec_tree_list)
+  end
+
+  def gen_dec_tree_list_rec(parent, outcome, samples, remaining, dec_tree_list)
+    return if samples.empty?
+    best = best_info_gain_attr(remaining, samples)
+    node = Node.new(best, parent, outcome)
+    dec_tree_list << node
+    pos_samples = samples.select {|s| s[best] == 0}
+    neg_samples = samples.select {|s| s[best] == 1}
+    remaining = remaining - [best]
+    if remaining.any?
+      gen_dec_tree_list_rec(node, 0, pos_samples, remaining, dec_tree_list)
+      gen_dec_tree_list_rec(node, 1, neg_samples, remaining, dec_tree_list)
+    end
+  end
+
+  def best_info_gain_attr(feature_list, samples)
+    max_gain_feature = -1
+    max_entropy = -1
+    feature_list.each do |feature|
+      current_entropy = entropy_for_samples(samples)
+      pos_samples = samples.select {|s| s[feature] == 0}
+      neg_samples = samples.select {|s| s[feature] == 1}
+      entropy_reduction = pos_samples.count/samples.count.to_f * entropy_for_samples(pos_samples)
+                        + neg_samples.count/samples.count.to_f * entropy_for_samples(neg_samples)
+      new_entropy = current_entropy - entropy_reduction
+      if new_entropy > max_entropy
+        max_entropy = new_entropy
+        max_gain_feature = feature
+      end
+    end
+    return max_gain_feature
   end
 
   def dep_bayes_classification(dep_tree, sample_set)
@@ -163,20 +209,6 @@ class AI::Command::Ml < AI::Command::Base
     byebug
   end
 
-  def initialize_conf_matrix
-    matrix = {}
-    i = 0
-    @num_classes.times do
-      j = 0
-      @num_classes.times do
-        matrix[:"#{i}_#{j}"] = 0
-        j += 1
-      end
-      i += 1
-    end
-    matrix
-  end
-
   # Estimate the dependent probabilities based on the estimated tree
   def est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
     dep_probs = []
@@ -204,9 +236,6 @@ class AI::Command::Ml < AI::Command::Base
         next
       else
         deps_edge_list << diff[:pair]
-        if deps_edge_list.size > 9
-          byebug
-        end
         join_lists = []
         connected_node_lists.each_with_index do |node_list, index|
           if (node_list & diff[:pair]).size > 0
@@ -235,7 +264,7 @@ class AI::Command::Ml < AI::Command::Base
     # set parents
     connect_tree_rec(deps_list[0], deps_edge_list, deps_list)
 
-    DependenceTree.new(deps_list).populate_children
+    DependenceTree.new(deps_list)
   end
 
   def connect_tree_rec(node, deps_edge_list, deps_list)
@@ -386,6 +415,40 @@ class AI::Command::Ml < AI::Command::Base
     Random.rand(100) <= prob * 100 ? 0 : 1
   end
 
+  def entropy_for_samples(samples)
+    class_counts = []
+    @num_classes.times do |i|
+      class_counts << samples.count {|s| s.last == i}
+    end
+    entropy(class_counts)
+  end
+
+  def entropy(class_sample_count)
+    base = class_sample_count.count
+    total = class_sample_count.sum
+    entropy = 0
+    class_sample_count.each do |class_count|
+      next if class_count == 0
+      class_fraction = (class_count/total.to_f)
+      entropy += -class_fraction * Math.log(class_fraction, base)
+    end
+    entropy
+  end
+
+  def initialize_conf_matrix
+    matrix = {}
+    i = 0
+    @num_classes.times do
+      j = 0
+      @num_classes.times do
+        matrix[:"#{i}_#{j}"] = 0
+        j += 1
+      end
+      i += 1
+    end
+    matrix
+  end
+
   def gen_dep_list
     list = []
     list << Node.new(0, nil)
@@ -451,13 +514,50 @@ class AI::Command::Ml < AI::Command::Base
     end
   end
 
+  class DecisionTree < DependenceTree
+
+    def populate_children
+      list.each do |node|
+        children = []
+        list.each do |child|
+          if child.parent && child.parent.feature == node.feature
+            children.insert(child.outcome, child)
+          end
+        end
+        node.children = children
+      end
+      self
+    end
+
+    def output_graph
+      g = GraphViz.new( :G, :type => :digraph )
+      glist = []
+
+      # Create nodes
+      list.each_with_index do |node,i|
+        glist << g.add_nodes(node.feature.to_s+"(#{i})")
+      end
+
+      # Create edges between the nodes
+      list.each_with_index do |node|
+        if node.parent
+          g.add_edges(glist[list.index(node.parent)], glist[list.index(node)])
+        end
+      end
+
+      # Generate output image
+      g.output( :png => "dependence_tree.png" )
+    end
+  end
+
   class Node
 
-    attr_accessor :feature, :parent, :children
+    attr_accessor :feature, :parent, :children, :outcome
 
-    def initialize(feature, parent)
+    def initialize(feature, parent, outcome=nil)
       @feature = feature
       @parent = parent
+      @outcome = outcome
       @children = []
     end
 
