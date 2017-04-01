@@ -9,7 +9,7 @@ ENV RAILS_ENV=development \
 RUN mkdir $APP_HOME
 WORKDIR $APP_HOME
 
-RUN gem install rake pqueue slop byebug ruby_deep_clone ruby-graphviz
+RUN gem install rake pqueue slop byebug ruby_deep_clone ruby-graphviz terminal-table
 
 ADD . $APP_HOME
 RUN bundle

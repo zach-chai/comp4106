@@ -2,6 +2,7 @@ require 'ai/command/base'
 require 'graphviz'
 require 'csv'
 require 'byebug'
+require 'terminal-table'
 
 class AI::Command::Ml < AI::Command::Base
   VALID_METHODS = ['help']
@@ -20,8 +21,8 @@ class AI::Command::Ml < AI::Command::Base
 
       puts "ML"
 
-      # artificial_data
-      real_data
+      artificial_data
+      # real_data
     end
   end
 
@@ -663,6 +664,25 @@ class AI::Command::Ml < AI::Command::Base
 
     def actual_predicted(key)
       key.to_s.split('_')
+    end
+
+    def print
+      heading = (data.keys.map {|e| actual_predicted(e)[0].to_s}).uniq
+      heading.insert(0, 'class')
+      rows = []
+      row = []
+      data.each do |key, value|
+        comp = actual_predicted(key)
+        if comp[1].to_i == 0
+          rows << row
+          row = [comp[0]]
+        end
+        row << value
+      end
+      rows.delete_at(0)
+      rows << row
+      table = Terminal::Table.new headings: heading, rows: rows
+      puts table
     end
   end
 

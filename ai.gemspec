@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
    spec.add_dependency "pqueue"
    spec.add_dependency "ruby_deep_clone"
    spec.add_dependency "ruby-graphviz"
+   spec.add_dependency "terminal-table"
 
   spec.add_development_dependency "bundler", "~> 1.13"
   spec.add_development_dependency "rake", "~> 12.0"
