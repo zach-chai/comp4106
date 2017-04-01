@@ -88,20 +88,21 @@ class AI::Command::Ml < AI::Command::Base
       est_cond_probs = est_cond_probs_matrix(samples)
       cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
       ord_cond_diffs = ordered_cond_diffs(cond_diffs)
-      # est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
+      est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
       est_dep_probs = est_dep_probs(est_dep_tree, est_cond_probs, est_ind_probs)
       classes << {samples: samples,
         est_ind_probs: est_ind_probs,
         est_cond_probs: est_cond_probs,
         cond_diffs: cond_diffs,
         ord_cond_diffs: ord_cond_diffs,
+        est_dep_tree: est_dep_tree,
         est_dep_probs: est_dep_probs
       }
     end
 
     classification_ind_bayes = ind_bayes_classification(sample_set)
-    klass_probs = classes.map { |k| {probs: k[:est_dep_probs]}  }
-    classification_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set, {classes: klass_probs})
+    klass_data = classes.map { |k| {probs: k[:est_dep_probs], dep_tree: k[:est_dep_tree]}  }
+    classification_dep_bayes = dep_bayes_classification(nil, sample_set, {classes: klass_data})
 
     dec_tree = gen_dec_tree(sample_set, classes)
     classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
@@ -218,7 +219,8 @@ class AI::Command::Ml < AI::Command::Base
   def dep_bayes_classification(dep_tree, sample_set, opts={})
     all_samples = sample_set.shuffle
     matrix = initialize_conf_matrix
-    classes = Array.new(@num_classes) {|i| Hash.new}
+    classes = opts[:classes]
+    classes ||= Array.new(@num_classes) {|i| Hash.new}
     test_size = all_samples.count / @k_fold
 
     i = 0
@@ -229,13 +231,9 @@ class AI::Command::Ml < AI::Command::Base
 
       classes.each_with_index do |classs, index|
         class_samples = train_samples.select {|s| s.last == index}
-        classs[:probs] = if opts[:classes] && opts[:classes][index][:probs].any?
-          opts[:classes][index][:probs]
-        else
-          est_dep_probs(dep_tree,
-            est_cond_probs_matrix(class_samples),
-            est_feature_probabilities(class_samples))
-        end
+        classs[:probs] ||= est_dep_probs(dep_tree,
+                            est_cond_probs_matrix(class_samples),
+                            est_feature_probabilities(class_samples))
       end
 
       test_samples.each do |test_sample|
@@ -250,8 +248,10 @@ class AI::Command::Ml < AI::Command::Base
 
   def classify_sample_dep(classes, sample, dep_tree)
     llhs = []
+    class_dep_tree = dep_tree
     classes.each do |classs|
-      node = dep_tree.root
+      class_dep_tree = classs[:dep_tree] if dep_tree.nil?
+      node = class_dep_tree.root
       llh = classs[:probs][node.feature]
       node.children.each do |child|
         llh = llh * classify_sample_dep_rec(sample, child, classs[:probs])
