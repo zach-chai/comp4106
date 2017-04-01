@@ -47,12 +47,6 @@ class AI::Command::Ml < AI::Command::Base
         est_dep_probs: est_dep_probs
       }
     end
-    puts "probs"
-    puts classes[0][:probs].to_s
-    puts "est_ind_probs"
-    puts classes[0][:est_ind_probs].to_s
-    puts "est_dep_probs"
-    puts classes[0][:est_dep_probs].to_s
 
     sample_set = []
     classes.each do |classs|
@@ -100,6 +94,13 @@ class AI::Command::Ml < AI::Command::Base
         est_dep_probs: est_dep_probs
       }
     end
+
+    conf_matrix_ind_bayes = ind_bayes_classification(sample_set)
+    klass_probs = classes.map { |k| {probs: k[:est_dep_probs]}  }
+    conf_matrix_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set, {classes: klass_probs})
+
+    dec_tree = gen_dec_tree(sample_set, classes)
+    conf_matrix_dec_tree = dec_tree_classification(dec_tree, sample_set)
 
     byebug
     # dep_tree.output_graph
@@ -207,7 +208,7 @@ class AI::Command::Ml < AI::Command::Base
     return max_gain_feature
   end
 
-  def dep_bayes_classification(dep_tree, sample_set)
+  def dep_bayes_classification(dep_tree, sample_set, opts={})
     all_samples = sample_set.shuffle
     matrix = initialize_conf_matrix
     classes = Array.new(@num_classes) {|i| Hash.new}
@@ -221,9 +222,13 @@ class AI::Command::Ml < AI::Command::Base
 
       classes.each_with_index do |classs, index|
         class_samples = train_samples.select {|s| s.last == index}
-        classs[:probs] = est_dep_probs(dep_tree,
-          est_cond_probs_matrix(class_samples),
-          est_feature_probabilities(class_samples))
+        classs[:probs] = if opts[:classes] && opts[:classes][index][:probs].any?
+          opts[:classes][index][:probs]
+        else
+          est_dep_probs(dep_tree,
+            est_cond_probs_matrix(class_samples),
+            est_feature_probabilities(class_samples))
+        end
       end
 
       test_samples.each do |test_sample|
@@ -236,18 +241,18 @@ class AI::Command::Ml < AI::Command::Base
     matrix
   end
 
-  def classify_sample_dep(classes, test_sample, dep_tree)
+  def classify_sample_dep(classes, sample, dep_tree)
     llhs = []
     classes.each do |classs|
       node = dep_tree.root
       llh = classs[:probs][node.feature]
       node.children.each do |child|
-        llh = llh * classify_sample_dep_rec(test_sample, child, classs[:probs])
+        llh = llh * classify_sample_dep_rec(sample, child, classs[:probs])
       end
       llhs << llh
     end
     llhs.index(llhs.max)
-  rescue
+  rescue => e
     byebug
   end
 
@@ -258,8 +263,14 @@ class AI::Command::Ml < AI::Command::Base
       llh = llh * classify_sample_dep_rec(sample, child, probs_list)
     end
     prob = probs_list[node.feature][parent_feature]
-    chance = sample[node.feature] == 0 ? prob : 1 - prob
+    chance = if prob.nil?
+      0.1
+    else
+      sample[node.feature] == 0 ? prob : 1 - prob
+    end
     return llh * chance
+  rescue => e
+    byebug
   end
 
   # perform naive bayes classification
@@ -302,7 +313,7 @@ class AI::Command::Ml < AI::Command::Base
       llh << likelihood
     end
     llh.index(llh.max)
-  rescue
+  rescue => e
     byebug
   end
 
@@ -438,8 +449,8 @@ class AI::Command::Ml < AI::Command::Base
     feature_probs.each_with_index do |feature_prob, feature|
       feature_diff_matrix = {}
       cond_probs[feature].each do |feature2, cond_probs|
-        diff0 = (feature_prob - cond_probs[0]).abs
-        diff1 = (feature_prob - cond_probs[1]).abs
+        diff0 = cond_probs[0].nil? ? 0 : (feature_prob - cond_probs[0]).abs
+        diff1 = cond_probs[1].nil? ? 0 : (feature_prob - cond_probs[1]).abs
         feature_diff_matrix[:"#{feature2}"] = (diff0 + diff1).round(2)
       end
       diff_matrix << feature_diff_matrix
@@ -461,9 +472,9 @@ class AI::Command::Ml < AI::Command::Base
         count_1 = samples.count {|e| e[feature2] == 1}
         count_when_0 = samples.count {|e| e[feature2] == 0 && e[feature1] == 0}
         count_when_1 = samples.count {|e| e[feature2] == 1 && e[feature1] == 0}
-        prob_f2_f1_0 = count_when_0 / count_0.to_f rescue 0
-        prob_f2_f1_1 = count_when_1 / count_1.to_f rescue 0
-        feature_probs_matrix[:"#{feature2}"] = [prob_f2_f1_0.round(2), prob_f2_f1_1.round(2)]
+        prob_f2_f1_0 = count_0 == 0 ? nil : (count_when_0 / count_0.to_f).round(2)
+        prob_f2_f1_1 = count_1 == 0 ? nil : (count_when_1 / count_1.to_f).round(2)
+        feature_probs_matrix[:"#{feature2}"] = [prob_f2_f1_0, prob_f2_f1_1]
       end
       probs_matrix << feature_probs_matrix
     end
