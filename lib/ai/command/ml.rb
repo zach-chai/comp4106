@@ -53,14 +53,17 @@ class AI::Command::Ml < AI::Command::Base
       sample_set += classs[:samples]
     end
 
-    conf_matrix_ind_bayes = ind_bayes_classification(sample_set)
-    conf_matrix_dep_bayes = dep_bayes_classification(classes[0][:est_dep_tree], sample_set)
+    classification_ind_bayes = ind_bayes_classification(sample_set)
+    classification_dep_bayes = dep_bayes_classification(classes[0][:est_dep_tree], sample_set)
 
     dec_tree = gen_dec_tree(sample_set, classes)
-    conf_matrix_dec_tree = dec_tree_classification(dec_tree, sample_set)
+    classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
+
+    conf_matrix_ind_bayes = ConfusionMatrix.new(classification_ind_bayes)
+    conf_matrix_dep_bayes = ConfusionMatrix.new(classification_dep_bayes)
+    conf_matrix_dec_tree = ConfusionMatrix.new(classification_dec_tree)
 
     byebug
-    # dep_tree.output_graph
   end
 
   def real_data
@@ -95,15 +98,18 @@ class AI::Command::Ml < AI::Command::Base
       }
     end
 
-    conf_matrix_ind_bayes = ind_bayes_classification(sample_set)
+    classification_ind_bayes = ind_bayes_classification(sample_set)
     klass_probs = classes.map { |k| {probs: k[:est_dep_probs]}  }
-    conf_matrix_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set, {classes: klass_probs})
+    classification_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set, {classes: klass_probs})
 
     dec_tree = gen_dec_tree(sample_set, classes)
-    conf_matrix_dec_tree = dec_tree_classification(dec_tree, sample_set)
+    classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
+
+    conf_matrix_ind_bayes = ConfusionMatrix.new(classification_ind_bayes)
+    conf_matrix_dep_bayes = ConfusionMatrix.new(classification_dep_bayes)
+    conf_matrix_dec_tree = ConfusionMatrix.new(classification_dec_tree)
 
     byebug
-    # dep_tree.output_graph
   end
 
   def organize_data(samples)
@@ -129,13 +135,13 @@ class AI::Command::Ml < AI::Command::Base
     all_samples = sample_set.shuffle
     matrix = initialize_conf_matrix
     classes = Array.new(@num_classes) {|i| Hash.new}
-    test_size = all_samples.count / @k_fold
+    test_size = all_samples.size / @k_fold
 
     i = 0
     @k_fold.times do
       test_samples = all_samples[(test_size*i)...(test_size*(i+1))]
       train_samples = all_samples[0...(test_size*i)]
-      train_samples += all_samples[(test_size*(i+1))...all_samples.count]
+      train_samples += all_samples[(test_size*(i+1))...all_samples.size]
 
       test_samples.each do |test_sample|
         predicted = classify_sample_dec_tree(test_sample, dec_tree)
@@ -598,6 +604,68 @@ class AI::Command::Ml < AI::Command::Base
     list
   end
 
+  class ConfusionMatrix
+
+    attr_accessor :data
+
+    def initialize(data)
+      @data = data
+    end
+
+    def accuracy()
+      (true_positives / samples.to_f).round(4)
+    end
+
+    def true_positives(klass=nil)
+      count = 0
+      data.each do |key, value|
+        comp = actual_predicted(key)
+        if (klass.nil? || comp[0].to_i == klass) && comp[0] == comp[1]
+          count += value
+        end
+      end
+      count
+    end
+
+    def true_negatives(klass)
+      true_positives - true_positives(klass)
+    end
+
+    def false_negatives()
+      count = 0
+      data.each do |key, value|
+        comp = actual_predicted(key)
+        if comp[0] < comp[1]
+          count += value
+        end
+      end
+      count
+    end
+
+    def false_positives()
+      count = 0
+      data.each do |key, value|
+        comp = actual_predicted(key)
+        if comp[0] > comp[1]
+          count += value
+        end
+      end
+      count
+    end
+
+    def samples()
+      count = 0
+      data.each do |key, value|
+        count += value
+      end
+      count
+    end
+
+    def actual_predicted(key)
+      key.to_s.split('_')
+    end
+  end
+
   class DependenceTree
 
     attr_accessor :list, :root
@@ -680,7 +748,7 @@ class AI::Command::Ml < AI::Command::Base
       end
 
       # Generate output image
-      g.output( :png => "dependence_tree.png" )
+      g.output( :png => "decision_tree.png" )
     end
   end
 
