@@ -6,23 +6,29 @@ require 'terminal-table'
 
 class AI::Command::Ml < AI::Command::Base
   VALID_METHODS = ['help']
-  FEATURE_LIST = 0..9
   THRESHOLDS = [13.5,1.6,2.2,22,90,2.8,2,0.38,1.7,5.4,0.8,2,1000]
+  NUM_FEATURES = '10'
+  NUM_CLASSES = '4'
+  NUM_SAMPLES = '2000'
+  NUM_FOLDS = '5'
 
   def index
     if @opts.help?
       $stdout.puts slop_opts
     else
-      @feature_list = FEATURE_LIST
-      @num_features = 10
-      @num_classes = 4
-      @num_samples = 2000
-      @k_fold = 5
+      @num_features = @opts[:features].to_i
+      @num_classes = @opts[:classes].to_i
+      @num_samples = @opts[:samples].to_i
+      @k_fold = @opts[:folds].to_i
+      @feature_list = 0...@num_features
 
       puts "ML"
 
-      artificial_data
-      # real_data
+      if @opts[:real]
+        real_data
+      else
+        artificial_data
+      end
     end
   end
 
@@ -54,8 +60,14 @@ class AI::Command::Ml < AI::Command::Base
       sample_set += classs[:samples]
     end
 
+    est_ind_probs = est_feature_probabilities(sample_set)
+    est_cond_probs = est_cond_probs_matrix(sample_set)
+    cond_diffs = ind_cond_diff_matrix(est_ind_probs, est_cond_probs)
+    ord_cond_diffs = ordered_cond_diffs(cond_diffs)
+    est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
+
     classification_ind_bayes = ind_bayes_classification(sample_set)
-    classification_dep_bayes = dep_bayes_classification(classes[0][:est_dep_tree], sample_set)
+    classification_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set)
 
     dec_tree = gen_dec_tree(sample_set, classes)
     classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
@@ -63,6 +75,21 @@ class AI::Command::Ml < AI::Command::Base
     conf_matrix_ind_bayes = ConfusionMatrix.new(classification_ind_bayes)
     conf_matrix_dep_bayes = ConfusionMatrix.new(classification_dep_bayes)
     conf_matrix_dec_tree = ConfusionMatrix.new(classification_dec_tree)
+
+    puts "Confusion Matrix - Bayesian (Independent)"
+    conf_matrix_ind_bayes.print
+    puts "Accuracy: #{conf_matrix_ind_bayes.accuracy * 100}%\n\n"
+
+    puts "Confusion Matrix - Bayesian (Dependent)"
+    conf_matrix_dep_bayes.print
+    puts "Accuracy: #{conf_matrix_dep_bayes.accuracy * 100}%\n\n"
+
+    puts "Confusion Matrix - Decision Tree"
+    conf_matrix_dec_tree.print
+    puts "Accuracy: #{conf_matrix_dec_tree.accuracy * 100}%\n\n"
+
+    classes[0][:est_dep_tree].output_graph
+    dec_tree.output_graph
 
     byebug
   end
@@ -110,6 +137,21 @@ class AI::Command::Ml < AI::Command::Base
     conf_matrix_ind_bayes = ConfusionMatrix.new(classification_ind_bayes)
     conf_matrix_dep_bayes = ConfusionMatrix.new(classification_dep_bayes)
     conf_matrix_dec_tree = ConfusionMatrix.new(classification_dec_tree)
+
+    puts "Confusion Matrix - Bayesian (Independent)"
+    conf_matrix_ind_bayes.print
+    puts "Accuracy: #{conf_matrix_ind_bayes.accuracy * 100}%\n\n"
+
+    puts "Confusion Matrix - Bayesian (Dependent)"
+    conf_matrix_dep_bayes.print
+    puts "Accuracy: #{conf_matrix_dep_bayes.accuracy * 100}%\n\n"
+
+    puts "Confusion Matrix - Decision Tree"
+    conf_matrix_dec_tree.print
+    puts "Accuracy: #{conf_matrix_dec_tree.accuracy * 100}%\n\n"
+
+    est_dep_tree.output_graph
+    dec_tree.output_graph
 
     byebug
   end
@@ -594,7 +636,7 @@ class AI::Command::Ml < AI::Command::Base
     list = []
     list << Node.new(0, nil)
     list << Node.new(1, list[0])
-    list << Node.new(2, list[1])
+    list << Node.new(2, list[0])
     list << Node.new(3, list[1])
     list << Node.new(4, list[2])
     list << Node.new(5, list[1])
@@ -757,7 +799,12 @@ class AI::Command::Ml < AI::Command::Base
 
       # Create nodes
       list.each_with_index do |node,i|
-        glist << g.add_nodes(node.feature.to_s+"(#{i})")
+        node_name = if node.feature.nil?
+          node.class
+        else
+          node.feature
+        end
+        glist << g.add_nodes("#{node_name.to_s}(#{i})")
       end
 
       # Create edges between the nodes
@@ -800,6 +847,11 @@ class AI::Command::Ml < AI::Command::Base
     opts.separator ''
     opts.separator 'Smp options:'
     opts.bool '-h', '--help', 'print options', default: false
+    opts.bool '-r', '--real', 'run with real data', default: false
+    opts.string '-d', '--features', 'number of features', default: NUM_FEATURES
+    opts.string '-c', '--classes', 'number of classes', default: NUM_CLASSES
+    opts.string '-s', '--samples', 'number of samples', default: NUM_SAMPLES
+    opts.string '-k', '--folds', 'number of folds', default: NUM_FOLDS
 
 
     self.slop_opts = opts
