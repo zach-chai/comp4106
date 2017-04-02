@@ -67,7 +67,7 @@ class AI::Command::Ml < AI::Command::Base
     est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
 
     classification_ind_bayes = ind_bayes_classification(sample_set)
-    classification_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set)
+    classification_dep_bayes = dep_bayes_classification(dep_tree, sample_set)
 
     dec_tree = gen_dec_tree(sample_set, classes)
     classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
@@ -132,7 +132,7 @@ class AI::Command::Ml < AI::Command::Base
     classification_dep_bayes = dep_bayes_classification(nil, sample_set, {classes: klass_data})
 
     dec_tree = gen_dec_tree(sample_set, classes)
-    classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
+    classification_dec_tree = dec_tree_classification(nil, sample_set)
 
     conf_matrix_ind_bayes = ConfusionMatrix.new(classification_ind_bayes)
     conf_matrix_dep_bayes = ConfusionMatrix.new(classification_dep_bayes)
@@ -175,7 +175,7 @@ class AI::Command::Ml < AI::Command::Base
     samples
   end
 
-  def dec_tree_classification(dec_tree, sample_set)
+  def dec_tree_classification(dec_tree_all, sample_set)
     all_samples = sample_set.shuffle
     matrix = initialize_conf_matrix
     classes = Array.new(@num_classes) {|i| Hash.new}
@@ -187,8 +187,16 @@ class AI::Command::Ml < AI::Command::Base
       train_samples = all_samples[0...(test_size*i)]
       train_samples += all_samples[(test_size*(i+1))...all_samples.size]
 
+      classes.each_with_index do |classs, index|
+        class_samples = train_samples.select {|s| s.last == index}
+        classs[:est_ind_probs] = est_feature_probabilities(class_samples)
+        classs[:probs] = classs[:est_ind_probs]
+      end
+
+      dec_tree = dec_tree_all.nil? ? gen_dec_tree(train_samples, classes) : dec_tree_all
+
       test_samples.each do |test_sample|
-        predicted = classify_sample_dec_tree(test_sample, dec_tree)
+        predicted = classify_sample_dec_tree(test_sample, dec_tree, {classes: classes})
         actual = test_sample.last
         matrix[:"#{actual}_#{predicted}"] += 1
       end
@@ -197,10 +205,13 @@ class AI::Command::Ml < AI::Command::Base
     matrix
   end
 
-  def classify_sample_dec_tree(test_sample, dec_tree)
+  def classify_sample_dec_tree(test_sample, dec_tree, opts={})
     node = dec_tree.root
     while node.children.any?
       node = node.children[test_sample[node.feature]]
+      if node.nil?
+        return classify_sample_ind(opts[:classes], test_sample)
+      end
     end
     node.class
   end
