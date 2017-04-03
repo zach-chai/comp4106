@@ -67,7 +67,7 @@ class AI::Command::Ml < AI::Command::Base
     est_dep_tree = est_dep_tree(ord_cond_diffs, {diff_matrix: cond_diffs})
 
     classification_ind_bayes = ind_bayes_classification(sample_set)
-    classification_dep_bayes = dep_bayes_classification(dep_tree, sample_set)
+    classification_dep_bayes = dep_bayes_classification(est_dep_tree, sample_set)
 
     dec_tree = gen_dec_tree(sample_set, classes)
     classification_dec_tree = dec_tree_classification(dec_tree, sample_set)
@@ -668,6 +668,14 @@ class AI::Command::Ml < AI::Command::Base
 
     def accuracy()
       (true_positives / samples.to_f).round(4)
+    end
+
+    def false_discovery_rate()
+      false_positives.to_f / (false_positives + true_positives)
+    end
+
+    def false_omission_rate()
+      false_negatives.to_f / (false_negatives + true_positives)
     end
 
     def true_positives(klass=nil)
