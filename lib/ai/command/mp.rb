@@ -3,8 +3,8 @@ require 'pqueue'
 
 class AI::Command::Mp < AI::Command::Base
   VALID_METHODS = ['help']
-  DEFAULT_TASKS = '10'
-  DEFAULT_MACHINES = '2'
+  DEFAULT_TASKS = '12'
+  DEFAULT_MACHINES = '3'
 
   def index
     if @opts.help?
@@ -38,6 +38,12 @@ class AI::Command::Mp < AI::Command::Base
 
       time_beg = Time.new
       astar = astar_search(tasks, machines, 'profit_per_cost')
+      time_end = Time.new
+      print_state(astar[:state])
+      puts "Time: #{time_end - time_beg}"
+
+      time_beg = Time.new
+      astar = greedy_search(tasks, machines, 'expected_profit')
       time_end = Time.new
       print_state(astar[:state])
       puts "Time: #{time_end - time_beg}"
@@ -90,7 +96,7 @@ class AI::Command::Mp < AI::Command::Base
       if transitions.empty?
         break
       else
-        fringe_priority_add(fringe, transitions, heuristic)
+        fringe_priority_add_astar(fringe, transitions, heuristic)
       end
 
       if fringe.empty?
@@ -102,7 +108,39 @@ class AI::Command::Mp < AI::Command::Base
     best_node
   end
 
-  def fringe_priority_add(fringe, transitions, heuristic)
+  def greedy_search(tasks, machines, heuristic)
+    @search_visits = {}
+    best_node = {}
+    max_profit = 0
+    node = {state: {available_tasks: tasks, machines: machines, assigned_tasks: []}}
+    fringe = PQueue.new([]) {|a,b| a[:heuristic] > b[:heuristic]}
+
+    while true
+      if (new_profit = calc_profit(node[:state][:assigned_tasks])) > max_profit
+        best_node = node
+        max_profit = new_profit
+      end
+
+      update_search_visits(node)
+      transitions = valid_transitions(node)
+
+      if transitions.empty?
+        break
+      else
+        fringe.clear
+        fringe_priority_add_greedy(fringe, transitions, heuristic)
+      end
+
+      if fringe.empty?
+        break
+      else
+        node = fringe.pop
+      end
+    end
+    best_node
+  end
+
+  def fringe_priority_add_astar(fringe, transitions, heuristic)
     transitions.each do |t|
       if heuristic == 'expected_profit'
         value = heuristic_expected_profit(t[:state])
@@ -111,11 +149,24 @@ class AI::Command::Mp < AI::Command::Base
       elsif heuristic == 'profit_per_cost'
         value = heuristic_expected_profit(t[:state])
         cost = calc_used_capacity(t[:state][:machines])
-        t[:heuristic] = value - cost * 1.5
+        t[:heuristic] = value - cost * 2
       else
         value = heuristic_expected_profit(t[:state])
         cost = calc_used_capacity(t[:state][:machines])
         t[:heuristic] = value - cost * 2.5
+      end
+      fringe << t
+    end
+  end
+
+  def fringe_priority_add_greedy(fringe, transitions, heuristic)
+    transitions.each do |t|
+      if heuristic == 'expected_profit'
+        t[:heuristic] = heuristic_expected_profit(t[:state])
+      elsif heuristic == 'profit_per_cost'
+        t[:heuristic] = heuristic_expected_profit(t[:state])
+      else
+        t[:heuristic] = heuristic_expected_profit(t[:state])
       end
       fringe << t
     end
