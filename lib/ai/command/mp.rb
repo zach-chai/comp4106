@@ -1,4 +1,5 @@
 require 'ai/command/base'
+require 'pqueue'
 
 class AI::Command::Mp < AI::Command::Base
   VALID_METHODS = ['help']
@@ -14,6 +15,9 @@ class AI::Command::Mp < AI::Command::Base
       @capacity_range = 20..80
       @num_tasks = @opts[:tasks].to_i
       @num_machines = @opts[:machines].to_i
+
+      @search_visits = {}
+
       puts "MP"
 
       tasks = []
@@ -28,26 +32,45 @@ class AI::Command::Mp < AI::Command::Base
         machines << Machine.new(Random.rand(@capacity_range))
       end
 
-      breadth_first_search(tasks, machines)
+      result = breadth_first_search(tasks, machines)
+      byebug
     end
   end
 
   def breadth_first_search(tasks, machines)
-    best_end = {}
+    best_node = {}
+    max_profit = 0
     node = {available_tasks: tasks, machines: machines, assigned_tasks: []}
     fringe = [node]
 
-    vt = valid_transitions(node)
-    byebug
     while true
+      if (new_profit = calc_profit(node[:assigned_tasks])) > max_profit
+        best_node = node
+        max_profit = new_profit
+      end
 
+      update_search_visits(node)
+      transitions = valid_transitions(node)
+      fringe = fringe | transitions
+
+      if fringe.empty?
+        break
+      else
+        node = fringe.pop
+      end
     end
+    best_node
   end
+
+
 
   def valid_transitions(node)
     transitions = []
     node[:available_tasks].each_with_index do |task, task_index|
       node[:machines].each_with_index do |machine, machine_index|
+        if machine.available < task.costs[machine.id]
+          next
+        end
         new_available = node[:available_tasks].clone
         new_assigned = node[:assigned_tasks].clone
         new_machines = node[:machines].clone
@@ -58,10 +81,35 @@ class AI::Command::Mp < AI::Command::Base
 
         new_assigned << new_available.delete_at(task_index)
 
-        transitions << {available_tasks: new_available, machines: new_machines, assigned_tasks: new_assigned}
+        transition = {available_tasks: new_available, machines: new_machines, assigned_tasks: new_assigned}
+        if !visited_path?(transition)
+          transitions << transition
+        end
       end
     end
     transitions
+  end
+
+  def visited_path?(transition)
+    !@search_visits[state_hash(transition)].nil?
+  end
+
+  def update_search_visits(node)
+    profit = calc_profit(node[:assigned_tasks])
+    hash = state_hash(node)
+    if !@search_visits[hash]
+      @search_visits[hash] = profit
+    end
+    true
+  end
+
+  def state_hash(state)
+    profit = calc_profit(state[:assigned_tasks])
+    "#{profit}#{state[:machines].map(&:available)}#{state[:available_tasks].map(&:id).sort}"
+  end
+
+  def calc_profit(tasks)
+    tasks.sum {|t| t.profit}
   end
 
   def generate_machine_values(range)
@@ -74,6 +122,7 @@ class AI::Command::Mp < AI::Command::Base
   end
 
   def print_state(state)
+    print "P: #{calc_profit(state[:assigned_tasks])} "
     print "Available: ["
     state[:available_tasks].each do |task|
       print " #{task.profit}"
