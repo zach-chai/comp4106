@@ -37,6 +37,12 @@ class AI::Command::Mp < AI::Command::Base
       puts "Time: #{time_end - time_beg}"
 
       time_beg = Time.new
+      bfs = depth_first_search(tasks, machines)
+      time_end = Time.new
+      print_state(bfs[:state])
+      puts "Time: #{time_end - time_beg}"
+
+      time_beg = Time.new
       astar = astar_search(tasks, machines, 'profit_cost')
       time_end = Time.new
       print_state(astar[:state])
@@ -65,14 +71,14 @@ class AI::Command::Mp < AI::Command::Base
   def breadth_first_search(tasks, machines)
     @search_visits = {}
     best_node = {}
-    max_profit = 0
+    best_profit = 0
     node = {state: {available_tasks: tasks, machines: machines, assigned_tasks: []}}
     fringe = [node]
 
     while true
-      if (new_profit = calc_profit(node[:state][:assigned_tasks])) > max_profit
+      if (new_profit = calc_profit(node[:state][:assigned_tasks])) > best_profit
         best_node = node
-        max_profit = new_profit
+        best_profit = new_profit
       end
 
       update_search_visits(node)
@@ -83,6 +89,37 @@ class AI::Command::Mp < AI::Command::Base
         break
       else
         node = fringe.pop
+      end
+    end
+    best_node
+  end
+
+  def depth_first_search(tasks, machines)
+    @search_visits = {}
+    best_node = {}
+    best_profit = 0
+    node = {state: {available_tasks: tasks, machines: machines, assigned_tasks: []}}
+    path_visits = [node]
+
+    while true
+      while true
+        transitions = valid_transitions(node)
+        if transitions.empty?
+          if (new_profit = calc_profit(node[:state][:assigned_tasks])) > best_profit
+            best_node = node
+            best_profit = new_profit
+          end
+          break
+        else
+          node = transitions[0]
+          update_search_visits(node)
+          path_visits << node
+        end
+      end
+      path_visits.pop
+      node = path_visits.last
+      if path_visits.empty?
+        break
       end
     end
     best_node
