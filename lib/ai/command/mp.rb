@@ -53,6 +53,12 @@ class AI::Command::Mp < AI::Command::Base
       time_end = Time.new
       print_state(greedy2[:state])
       puts "Time: #{time_end - time_beg}"
+
+      time_beg = Time.new
+      ucs = uniform_cost_search(tasks, machines)
+      time_end = Time.new
+      print_state(ucs[:state])
+      puts "Time: #{time_end - time_beg}"
     end
   end
 
@@ -194,6 +200,40 @@ class AI::Command::Mp < AI::Command::Base
 
   def heuristic_profit_per_cost(state)
     calc_profit(state[:assigned_tasks]) / calc_used_capacity(state[:machines]).to_f
+  end
+
+  def uniform_cost_search(tasks, machines)
+    @search_visits = {}
+    best_node = {}
+    best_profit = 0
+    node = {state: {available_tasks: tasks, machines: machines, assigned_tasks: []}}
+    fringe = PQueue.new([]) {|a,b| a[:heuristic] < b[:heuristic]}
+
+    while true
+      if (new_profit = calc_profit(node[:state][:assigned_tasks])) > best_profit
+        best_node = node
+        best_profit = new_profit
+      end
+
+      update_search_visits(node)
+      transitions = valid_transitions(node)
+
+      if transitions.empty?
+        break
+      else
+        transitions.each do |t|
+          t[:heuristic] = calc_used_capacity(t[:state][:machines]) / t[:state][:assigned_tasks].size.to_f
+          fringe << t
+        end
+      end
+
+      if fringe.empty?
+        break
+      else
+        node = fringe.pop
+      end
+    end
+    best_node
   end
 
   def valid_transitions(node)
