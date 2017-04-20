@@ -1,5 +1,6 @@
 require 'ai/command/base'
 require 'pqueue'
+require 'terminal-table'
 
 class AI::Command::Mp < AI::Command::Base
   VALID_METHODS = ['help']
@@ -33,38 +34,53 @@ class AI::Command::Mp < AI::Command::Base
       time_beg = Time.new
       bfs = breadth_first_search(tasks, machines)
       time_end = Time.new
+      bfs[:algorithm] = "Breadth First Search"
+      bfs[:time] = time_end - time_beg
       print_state(bfs[:state])
       puts "Time: #{time_end - time_beg}"
 
       time_beg = Time.new
-      bfs = depth_first_search(tasks, machines)
+      dfs = depth_first_search(tasks, machines)
       time_end = Time.new
-      print_state(bfs[:state])
+      dfs[:algorithm] = "Depth First Search"
+      dfs[:time] = time_end - time_beg
+      print_state(dfs[:state])
       puts "Time: #{time_end - time_beg}"
 
       time_beg = Time.new
       astar = astar_search(tasks, machines, 'profit_cost')
       time_end = Time.new
+      astar[:algorithm] = "A* Search"
+      astar[:time] = time_end - time_beg
       print_state(astar[:state])
       puts "Time: #{time_end - time_beg}"
 
       time_beg = Time.new
-      greedy = greedy_search(tasks, machines, 'expected_profit')
+      beam = beam_search(tasks, machines, 'profit_cost')
       time_end = Time.new
-      print_state(greedy[:state])
+      beam[:algorithm] = "Beam Search"
+      beam[:time] = time_end - time_beg
+      print_state(beam[:state])
       puts "Time: #{time_end - time_beg}"
 
       time_beg = Time.new
-      greedy2 = greedy_search(tasks, machines, 'profit_per_cost')
+      gbfs = greedy_search(tasks, machines, 'profit_per_cost')
       time_end = Time.new
-      print_state(greedy2[:state])
+      gbfs[:algorithm] = "Greedy Best First Search"
+      gbfs[:time] = time_end - time_beg
+      print_state(gbfs[:state])
       puts "Time: #{time_end - time_beg}"
 
       time_beg = Time.new
       ucs = uniform_cost_search(tasks, machines)
       time_end = Time.new
+      ucs[:algorithm] = "Uniform Cost Search"
+      ucs[:time] = time_end - time_beg
       print_state(ucs[:state])
       puts "Time: #{time_end - time_beg}"
+
+      results = [bfs, dfs, astar, beam, gbfs, ucs]
+      print_table(results)
     end
   end
 
@@ -169,6 +185,8 @@ class AI::Command::Mp < AI::Command::Base
       end
     end
     best_node
+  rescue
+    best_node
   end
 
   def fringe_priority_add_astar(fringe, transitions, heuristic)
@@ -183,6 +201,58 @@ class AI::Command::Mp < AI::Command::Base
         t[:heuristic] = value - cost * 2
       end
       fringe << t
+    end
+  end
+
+  def beam_search(tasks, machines, heuristic)
+    @search_visits = {}
+    best_node = {}
+    best_profit = 0
+    node = {state: {available_tasks: tasks, machines: machines, assigned_tasks: []}}
+    fringe = PQueue.new([]) {|a,b| a[:heuristic] > b[:heuristic]}
+    beam_size = 200
+
+    while true
+      if (new_profit = calc_profit(node[:state][:assigned_tasks])) > best_profit
+        best_node = node
+        best_profit = new_profit
+      end
+
+      update_search_visits(node)
+      transitions = valid_transitions(node)
+
+      if !transitions.empty?
+        fringe_priority_add_beam(fringe, transitions, heuristic, beam_size)
+      end
+
+      if fringe.empty?
+        break
+      else
+        while visited_path?(node)
+          node = fringe.pop
+        end
+      end
+    end
+    best_node
+  rescue
+    best_node
+  end
+
+  def fringe_priority_add_beam(fringe, transitions, heuristic, size)
+    transitions.each do |t|
+      if heuristic == 'profit_cost'
+        value = heuristic_expected_profit(t[:state])
+        cost = calc_used_capacity(t[:state][:machines])
+        t[:heuristic] = (value - cost) / t[:state][:assigned_tasks].size.to_f
+      else
+        value = heuristic_expected_profit(t[:state])
+        cost = calc_used_capacity(t[:state][:machines])
+        t[:heuristic] = value - cost * 2
+      end
+      fringe << t
+      if fringe.size > size
+        fringe.shift
+      end
     end
   end
 
@@ -286,7 +356,7 @@ class AI::Command::Mp < AI::Command::Base
         new_machines = state[:machines].clone
         new_machine = machine.clone
 
-        new_machine.used += task.costs[machine.id]
+        new_machine.assign(task)
         new_machines[machine_index] = new_machine
 
         new_assigned << new_available.delete_at(task_index)
@@ -340,6 +410,17 @@ class AI::Command::Mp < AI::Command::Base
     values
   end
 
+  def print_table(results)
+    heading = ['Algorithm', 'Profit', 'Time']
+    rows = []
+    results.each do |result|
+      profit = calc_profit(result[:state][:assigned_tasks])
+      rows << [result[:algorithm], profit, result[:time]]
+    end
+    table = Terminal::Table.new headings: heading, rows: rows
+    puts table
+  end
+
   def print_state(state)
     print "P: #{calc_profit(state[:assigned_tasks])} "
     print "Available: ["
@@ -374,18 +455,29 @@ class AI::Command::Mp < AI::Command::Base
 
   class Machine
 
-    attr_accessor :id, :capacity, :used
+    attr_accessor :id, :capacity, :used, :tasks
     @@count = 0
 
     def initialize(capacity)
       @id = @@count
       @capacity = capacity
       @used = 0
+      @tasks = []
       @@count += 1
     end
 
     def available
       @capacity - @used
+    end
+
+    def assign(task)
+      # tasks << task
+      @used += task.costs[@id]
+    end
+
+    def unassign(task)
+      tasks.delete_if {|t| t.id == task.id}
+      @used -= task.costs[@id]
     end
   end
 
