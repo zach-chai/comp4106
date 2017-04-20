@@ -13,3 +13,5 @@ RUN gem install rake pqueue slop byebug ruby_deep_clone ruby-graphviz terminal-t
 
 ADD . $APP_HOME
 RUN bundle
+
+RUN rake install
