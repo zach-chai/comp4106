@@ -6,6 +6,8 @@ class AI::Command::Mp < AI::Command::Base
   VALID_METHODS = ['help']
   DEFAULT_TASKS = '12'
   DEFAULT_MACHINES = '3'
+  DEFAULT_INCLUDE = 'bfs,dfs,astar,beam,gbfs,ucs'
+  DEFAULT_EXCLUDE = ''
 
   def index
     if @opts.help?
@@ -16,6 +18,8 @@ class AI::Command::Mp < AI::Command::Base
       @capacity_range = 20..60
       @num_tasks = @opts[:tasks].to_i
       @num_machines = @opts[:machines].to_i
+      @include = @opts[:include].split(',')
+      @exclude = @opts[:exclude].split(',')
 
       puts "MP"
 
@@ -31,55 +35,74 @@ class AI::Command::Mp < AI::Command::Base
         machines << Machine.new(Random.rand(@capacity_range))
       end
 
-      time_beg = Time.new
-      bfs = breadth_first_search(tasks, machines)
-      time_end = Time.new
-      bfs[:algorithm] = "Breadth First Search"
-      bfs[:time] = time_end - time_beg
-      print_state(bfs[:state])
-      puts "Time: #{time_end - time_beg}"
+      results = []
 
-      time_beg = Time.new
-      dfs = depth_first_search(tasks, machines)
-      time_end = Time.new
-      dfs[:algorithm] = "Depth First Search"
-      dfs[:time] = time_end - time_beg
-      print_state(dfs[:state])
-      puts "Time: #{time_end - time_beg}"
+      if @include.include?('bfs') && !@exclude.include?('bfs')
+        time_beg = Time.new
+        bfs = breadth_first_search(tasks, machines)
+        time_end = Time.new
+        bfs[:algorithm] = "Breadth First Search"
+        bfs[:time] = time_end - time_beg
+        print_state(bfs[:state])
+        puts "Time: #{time_end - time_beg}"
+        results << bfs
+      end
 
-      time_beg = Time.new
-      astar = astar_search(tasks, machines, 'profit_cost')
-      time_end = Time.new
-      astar[:algorithm] = "A* Search"
-      astar[:time] = time_end - time_beg
-      print_state(astar[:state])
-      puts "Time: #{time_end - time_beg}"
+      if @include.include?('dfs') && !@exclude.include?('dfs')
+        time_beg = Time.new
+        dfs = depth_first_search(tasks, machines)
+        time_end = Time.new
+        dfs[:algorithm] = "Depth First Search"
+        dfs[:time] = time_end - time_beg
+        print_state(dfs[:state])
+        results << dfs
+        puts "Time: #{time_end - time_beg}"
+      end
 
-      time_beg = Time.new
-      beam = beam_search(tasks, machines, 'profit_cost')
-      time_end = Time.new
-      beam[:algorithm] = "Beam Search"
-      beam[:time] = time_end - time_beg
-      print_state(beam[:state])
-      puts "Time: #{time_end - time_beg}"
+      if @include.include?('astar') && !@exclude.include?('astar')
+        time_beg = Time.new
+        astar = astar_search(tasks, machines, 'profit_cost')
+        time_end = Time.new
+        astar[:algorithm] = "A* Search"
+        astar[:time] = time_end - time_beg
+        print_state(astar[:state])
+        results << astar
+        puts "Time: #{time_end - time_beg}"
+      end
 
-      time_beg = Time.new
-      gbfs = greedy_search(tasks, machines, 'profit_per_cost')
-      time_end = Time.new
-      gbfs[:algorithm] = "Greedy Best First Search"
-      gbfs[:time] = time_end - time_beg
-      print_state(gbfs[:state])
-      puts "Time: #{time_end - time_beg}"
+      if @include.include?('beam') && !@exclude.include?('beam')
+        time_beg = Time.new
+        beam = beam_search(tasks, machines, 'profit_cost')
+        time_end = Time.new
+        beam[:algorithm] = "Beam Search"
+        beam[:time] = time_end - time_beg
+        print_state(beam[:state])
+        results << beam
+        puts "Time: #{time_end - time_beg}"
+      end
 
-      time_beg = Time.new
-      ucs = uniform_cost_search(tasks, machines)
-      time_end = Time.new
-      ucs[:algorithm] = "Uniform Cost Search"
-      ucs[:time] = time_end - time_beg
-      print_state(ucs[:state])
-      puts "Time: #{time_end - time_beg}"
+      if @include.include?('gbfs') && !@exclude.include?('gbfs')
+        time_beg = Time.new
+        gbfs = greedy_search(tasks, machines, 'profit_per_cost')
+        time_end = Time.new
+        gbfs[:algorithm] = "Greedy Best First Search"
+        gbfs[:time] = time_end - time_beg
+        print_state(gbfs[:state])
+        results << gbfs
+        puts "Time: #{time_end - time_beg}"
+      end
 
-      results = [bfs, dfs, astar, beam, gbfs, ucs]
+      if @include.include?('ucs') && !@exclude.include?('ucs')
+        time_beg = Time.new
+        ucs = uniform_cost_search(tasks, machines)
+        time_end = Time.new
+        ucs[:algorithm] = "Uniform Cost Search"
+        ucs[:time] = time_end - time_beg
+        print_state(ucs[:state])
+        results << ucs
+        puts "Time: #{time_end - time_beg}"
+      end
+
       print_table(results)
     end
   end
@@ -491,6 +514,8 @@ class AI::Command::Mp < AI::Command::Base
     opts.bool '-h', '--help', 'print options', default: false
     opts.string '-t', '--tasks', 'num tasks', default: DEFAULT_TASKS
     opts.string '-m', '--machines', 'num machines', default: DEFAULT_MACHINES
+    opts.string '-i', '--include', 'algorithms to include e.g. bfs dfs astar beam gbfs ucs', default: DEFAULT_INCLUDE
+    opts.string '-e', '--exclude', 'algorithms to exclude e.g. bfs dfs astar beam gbfs ucs', default: DEFAULT_EXCLUDE
 
 
     self.slop_opts = opts
